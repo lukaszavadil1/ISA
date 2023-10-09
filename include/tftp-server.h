@@ -5,3 +5,10 @@
 //
 // Description: Header file for tftp server.
 //
+
+#ifndef TFTP_SERVER_H
+#define TFTP_SERVER_H
+
+#include <stdio.h>
+
+#endif // TFTP_SERVER_H

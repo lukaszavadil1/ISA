@@ -7,8 +7,17 @@
 //
 
 #include "tftp-server.h"
-#include <stdio.h>
 
-int main() {
+/**
+*
+* @brief Main function of TFTP server.
+*
+* @param argc Number of command line arguments.
+* @param argv Command line arguments array.
+*
+* @return Program exit code.
+*
+*/
+int main(int argc, char *argv[]) {
     return 0;
 }
