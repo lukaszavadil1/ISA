@@ -20,8 +20,20 @@
 */
 int main(int argc, char *argv[]) {
     ClientArgs_t client_args;
+    init_args(&client_args);
     parse_args(argc, argv, &client_args);
+    printf("Host name: %s\n", client_args.host_name);
+    printf("Port: %d\n", client_args.port);
+    printf("File path: %s\n", client_args.file_path);
+    printf("Destination file path: %s\n", client_args.dest_file_path);
     return 0;
+}
+
+void init_args(ClientArgs_t *client_args) {
+    client_args->host_name = malloc(MAX_STR_LEN);
+    client_args->port = 69;
+    client_args->file_path = malloc(MAX_STR_LEN);
+    client_args->dest_file_path = malloc(MAX_STR_LEN);
 }
 
 void parse_args(int argc, char *argv[], ClientArgs_t *client_args) {
@@ -36,34 +48,40 @@ void parse_args(int argc, char *argv[], ClientArgs_t *client_args) {
                 if (h_flag) {
                     error_exit("Duplicate option.");
                 }
+                strcpy(client_args->host_name, optarg);
                 h_flag = true;
                 break;
             case 'p':
                 if (p_flag) {
                     error_exit("Duplicate option.");
                 }
+                char *endptr;
+                int port = strtoul(optarg, &endptr, 10);
+                if (*endptr != '\0' || port > 65535 || port < 1) {
+                    error_exit("Invalid port number.");
+                }
+                client_args->port = port;
                 p_flag = true;
                 break;
             case 'f':
                 if (f_flag) {
                     error_exit("Duplicate option.");
                 }
+                strcpy(client_args->file_path, optarg);
                 f_flag = true;
                 break;
             case 't':
                 if (t_flag) {
                     error_exit("Duplicate option.");
                 }
+                strcpy(client_args->dest_file_path, optarg);
                 t_flag = true;
-                break;
-            case '?':
-                error_exit("Unknown option.");
                 break;
             case ':':
                 error_exit("Missing argument.");
                 break;
             default:
-                error_exit("Unknown error.");
+                error_exit("Argument error.");
                 break;
         }
         if (argv[optind] != NULL) {
