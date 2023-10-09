@@ -1,9 +1,9 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -pedantic -std=c99
 
-CLIENT_OBJ = obj/tftp-client.o
-SERVER_OBJ = obj/tftp-server.o
 UTILS_OBJ = obj/utils.o
+CLIENT_OBJ = obj/tftp-client.o $(UTILS_OBJ)
+SERVER_OBJ = obj/tftp-server.o $(UTILS_OBJ)
 
 CLIENT_BIN = bin/tftp-client
 SERVER_BIN = bin/tftp-server

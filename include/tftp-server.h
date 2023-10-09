@@ -9,6 +9,6 @@
 #ifndef TFTP_SERVER_H
 #define TFTP_SERVER_H
 
-#include <stdio.h>
+#include "utils.h"
 
 #endif // TFTP_SERVER_H

@@ -6,7 +6,7 @@
 // Description: Implementation of TFTP server.
 //
 
-#include "tftp-server.h"
+#include "../include/tftp-server.h"
 
 /**
 *
