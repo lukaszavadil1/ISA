@@ -16,3 +16,28 @@ void error_exit(const char *message) {
     }
     exit(EXIT_FAILURE);
 }
+
+int parse_port(char *port_str) {
+    char *endptr = malloc(MAX_STR_LEN);
+    int port = (int)strtol(port_str, &endptr, 10);
+    if (*endptr != '\0' || port > 65535 || port < 1) {
+        error_exit("Invalid port number.");
+    }
+    return port;
+}
+
+void display_client_help() {
+    printf("Usage: bin/tftp-client -h hostname [-p port] [-f filepath] -t dest_filepath\n");
+    printf("Options:\n");
+    printf("  -h  IP address or host name of the TFTP server.\n");
+    printf("  -p  Port number of the TFTP server.\n");
+    printf("  -f  Path to the file on the TFTP server.\n");
+    printf("  -t  Path to the destination file.\n");
+}
+
+void display_server_help() {
+    printf("Usage: bin/tftp-server [-p port] root_dirpath\n");
+    printf("Options:\n");
+    printf("  -p  Port number of the TFTP server.\n");
+    printf("  -d  Path to the directory with files.\n");
+}

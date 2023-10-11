@@ -22,7 +22,7 @@ typedef struct ClientArgs {
 } ClientArgs_t;
 
 /**
-* @brief Initializes ClientArgs_t struct.
+* @brief Initialize ClientArgs_t struct.
 *
 * @param client_args Pointer to ClientArgs_t struct.
 *
@@ -31,7 +31,15 @@ typedef struct ClientArgs {
 void init_args(ClientArgs_t *client_args);
 
 /**
-* @brief Handles client's command line arguments.
+* @brief Deallocate memory allocated for ClientArgs_t struct.
+*
+* @param client_args Pointer to ClientArgs_t struct.
+*
+*/
+void free_args(ClientArgs_t *client_args);
+
+/**
+* @brief Handle client's command line arguments.
 *
 * @param argc Number of command line arguments.
 * @param argv Command line arguments array.

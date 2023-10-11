@@ -27,4 +27,27 @@
 */
 void error_exit(const char *message);
 
+/**
+* @brief Parse port number from string.
+*
+* @param port_str String containing port number.
+*
+* @return Port number.
+*/
+int parse_port(char *port_str);
+
+/**
+* @brief Display client's usage.
+*
+* @return void
+*/
+void display_client_help();
+
+/**
+* @brief Display server's usage.
+*
+* @return void
+*/
+void display_server_help();
+
 #endif // UTILS_H

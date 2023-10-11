@@ -19,13 +19,15 @@
 *
 */
 int main(int argc, char *argv[]) {
-    ClientArgs_t client_args;
-    init_args(&client_args);
-    parse_args(argc, argv, &client_args);
-    printf("Host name: %s\n", client_args.host_name);
-    printf("Port: %d\n", client_args.port);
-    printf("File path: %s\n", client_args.file_path);
-    printf("Destination file path: %s\n", client_args.dest_file_path);
+    ClientArgs_t *client_args;
+    client_args = malloc(sizeof(ClientArgs_t));
+    init_args(client_args);
+    parse_args(argc, argv, client_args);
+    printf("Host name: %s\n", client_args->host_name);
+    printf("Port: %d\n", client_args->port);
+    printf("File path: %s\n", client_args->file_path);
+    printf("Destination file path: %s\n", client_args->dest_file_path);
+    free_args(client_args);
     return 0;
 }
 
@@ -36,7 +38,18 @@ void init_args(ClientArgs_t *client_args) {
     client_args->dest_file_path = malloc(MAX_STR_LEN);
 }
 
+void free_args(ClientArgs_t *client_args) {
+    free(client_args->host_name);
+    free(client_args->file_path);
+    free(client_args->dest_file_path);
+    free(client_args);
+}
+
 void parse_args(int argc, char *argv[], ClientArgs_t *client_args) {
+    if (argc == 1) {
+        display_client_help();
+        exit(EXIT_SUCCESS);
+    }
     if (argc > 9 || argc < 5) { 
         error_exit("Invalid number of arguments.");
     }
@@ -55,11 +68,7 @@ void parse_args(int argc, char *argv[], ClientArgs_t *client_args) {
                 if (p_flag) {
                     error_exit("Duplicate option.");
                 }
-                char *endptr;
-                int port = strtoul(optarg, &endptr, 10);
-                if (*endptr != '\0' || port > 65535 || port < 1) {
-                    error_exit("Invalid port number.");
-                }
+                int port = parse_port(optarg);
                 client_args->port = port;
                 p_flag = true;
                 break;
