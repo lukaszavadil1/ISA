@@ -19,18 +19,65 @@
 *
 */
 int main(int argc, char *argv[]) {
+    // Socket file descriptor.
+    int sock_fd;              
+
+    // Server address.                           
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+
+    // Packet from client.
+    char packet[MAX_PACKET_SIZE];      
+    memset(&packet, 0, MAX_PACKET_SIZE);
+
+    // Client address and its size.           
+    struct sockaddr client_address;                  
+    size_t client_address_size = sizeof(client_address);
+    
+    // Initialize server arguments structure and its members.
     ServerArgs_t *server_args;
     server_args = malloc(sizeof(ServerArgs_t));
     init_args(server_args);
+
+    // Parse command line arguments.
     parse_args(argc, argv, server_args);
-    printf("Port: %d\n", server_args->port);
-    printf("Directory path: %s\n", server_args->dir_path);
+
+    // Create socket.
+    if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        error_exit("Failed to create socket.");
+    }
+
+    // Set Ipv4 address family.
+    server_addr.sin_family = AF_INET;
+
+    // Set port number.
+    server_addr.sin_port = htons(server_args->port);
+
+    // Set address to any interface.
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    // Bind socket to the  server address and port.
+    if (bind(sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        error_exit("Failed to bind socket.");
+    }
+
+    // Listen for incoming client connections.
+    while (true) {
+        if ((recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+                      (socklen_t *) &client_address_size)) < 0) {
+            error_exit("handle_request(): recvfrom failed");
+        }
+        printf("Received packet.\n");
+        printf("Packet data: %s\n", packet);
+    }
+
+    // Free server arguments structure and its members.
     free_args(server_args);
     return 0;
 }
 
 void init_args(ServerArgs_t *server_args) {
-    server_args->port = 69;
+    server_args->port = DEFAULT_PORT_NUM;
     server_args->dir_path = malloc(MAX_STR_LEN);
 }
 

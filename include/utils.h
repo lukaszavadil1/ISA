@@ -9,14 +9,30 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#define MAX_STR_LEN 1024
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <getopt.h>
 #include <stdbool.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+// Maximal length of string.
+#define MAX_STR_LEN 512
+#define MAX_PACKET_SIZE 1024
+
+// Opcode values based on TFTP RFC 1350.
+#define RRQ 1
+#define WRQ 2
+#define DATA 3
+#define ACK 4
+#define ERROR 5
+#define OACK 6
+
+// Default port number
+#define DEFAULT_PORT_NUM 69
 
 /**
 * @brief Prints error message and exits program.

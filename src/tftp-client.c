@@ -19,21 +19,59 @@
 *
 */
 int main(int argc, char *argv[]) {
+    // Socket file descriptor.
+    int sock_fd;
+
+    // Server address.
+    struct sockaddr_in server_address;
+
+    // Initialize client arguments structure and its members.
     ClientArgs_t *client_args;
     client_args = malloc(sizeof(ClientArgs_t));
     init_args(client_args);
+
+    // Parse command line arguments.
     parse_args(argc, argv, client_args);
-    printf("Host name: %s\n", client_args->host_name);
-    printf("Port: %d\n", client_args->port);
-    printf("File path: %s\n", client_args->file_path);
-    printf("Destination file path: %s\n", client_args->dest_file_path);
+
+    // Packet payload.
+    char payload[MAX_PACKET_SIZE];
+    memset(&payload, 0, MAX_PACKET_SIZE);
+    strcpy(payload, client_args->file_path);
+
+    // Create socket.
+    if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        error_exit("Failed to create socket.");
+    }
+
+    // Set Ipv4 address family.
+    server_address.sin_family = AF_INET;
+
+    // Set port number.
+    server_address.sin_port = htons(client_args->port);
+
+    // Convert IP address from text to binary form.
+    inet_pton(AF_INET, client_args->host_name, &server_address.sin_addr);
+
+    // Create socket.
+    if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        error_exit("Failed to create socket.");
+    }
+
+    // Send data to the server.
+    if (sendto(sock_fd, payload, strlen(payload), MSG_CONFIRM,
+               (const struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
+        error_exit("Sendto failed.");
+    }
+    printf("Data sent.\n");
+
+    // Free client arguments structure and its members.
     free_args(client_args);
     return 0;
 }
 
 void init_args(ClientArgs_t *client_args) {
     client_args->host_name = malloc(MAX_STR_LEN);
-    client_args->port = 69;
+    client_args->port = DEFAULT_PORT_NUM;
     client_args->file_path = malloc(MAX_STR_LEN);
     client_args->dest_file_path = malloc(MAX_STR_LEN);
 }
