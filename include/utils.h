@@ -36,6 +36,8 @@
 // Default port number
 #define DEFAULT_PORT_NUM 69
 
+extern int packet_pos;
+
 /**
 * @brief Prints error message and exits program.
 *
@@ -83,5 +85,80 @@ int create_socket();
 * @return void
 */
 void sigint_handler(int sig);
+
+/**
+* @brief Set packet's opcode.
+*
+* @param opcode Opcode.
+* @param packet Pointer to packet.
+*
+* @return void
+*/
+void opcode_set(int opcode, char *packet);
+
+/**
+* @brief Get packet's opcode.
+*
+* @param packet Pointer to packet.
+*
+* @return Opcode.
+*/
+int opcode_get(char *packet);
+
+/**
+* @brief Set packet's file name.
+*
+* @param file_name File name.
+* @param packet Pointer to packet.
+*
+* @return void
+*/
+void file_name_set(char *file_name, char *packet);
+
+/**
+* @brief Get packet's file name.
+*
+* @param packet Pointer to packet.
+*
+* @return File name.
+*/
+char *file_name_get(char *packet);
+
+/**
+* @brief Set packet's mode.
+*
+* @param mode Mode.
+* @param packet Pointer to packet.
+*
+* @return void
+*/
+void mode_set(int mode, char *packet);
+
+/**
+* @brief Get packet's mode.
+*
+* @param packet Pointer to packet.
+*
+* @return Mode.
+*/
+char *mode_get(char *packet);
+
+/**
+* @brief Insert empty byte to packet.
+*
+* @param packet Pointer to packet.
+*
+* @return void
+*/
+void empty_byte_insert(char *packet);
+
+/**
+* @brief Get opcode string from opcode.
+*
+* @param opcode Opcode.
+*
+* @return Opcode string.
+*/
+char *opcode_to_str(int opcode);
 
 #endif // UTILS_H

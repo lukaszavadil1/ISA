@@ -47,6 +47,6 @@ void free_args(ClientArgs_t *client_args);
 *
 * @return void
 */
-void parse_args(int argc, char *argv[], ClientArgs_t *client_args);
+void parse_args(int argc, char *argv[], ClientArgs_t *client_args, int *opcode);
 
 #endif // TFTP_CLIENT_H

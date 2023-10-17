@@ -8,6 +8,8 @@
 
 #include "../include/utils.h"
 
+int packet_pos = 0;
+
 void error_exit(const char *message) {
     (errno == 0) ? fprintf(stderr, "Error: %s\n", message) : fprintf(stderr, "Error: %s (%s)\n", message, strerror(errno));
     exit(EXIT_FAILURE);
@@ -52,4 +54,84 @@ int create_socket() {
 void sigint_handler(int sig) {
     printf("\nSIGINT (signal %d) received. Exiting...\n", sig);
     exit(EXIT_SUCCESS);
+}
+
+void opcode_set(int opcode, char *packet) {
+    // Save opcode in network byte order.
+    opcode = htons(opcode);
+    // Copy opcode to first two bytes of packet.
+    memcpy(packet, &(opcode), 2);
+    // Increment pointer position in packet.
+    packet_pos += 2;
+}
+
+int opcode_get(char *packet) {
+    int opcode;
+    // Copy opcode from first two bytes of packet.
+    memcpy(&opcode, packet, 2);
+    // Convert opcode to host byte order.
+    opcode = ntohs(opcode);
+    // Increment pointer position in packet.
+    packet_pos += 2;
+    return opcode;
+}
+
+void file_name_set(char *file_name, char *packet) {
+    // Copy file name to packet.
+    strcpy(packet + packet_pos, file_name);
+    // Increment pointer position in packet.
+    packet_pos += strlen(file_name);
+}
+
+char *file_name_get(char *packet) {
+    char *file_name = malloc(MAX_STR_LEN);
+    if (file_name == NULL) {
+        error_exit("File name malloc failed.");
+    }
+    // Copy file name from packet.
+    strcpy(file_name, packet + packet_pos);
+    // Increment pointer position in packet.
+    packet_pos += strlen(file_name) + 1;
+    return file_name;
+}
+
+void mode_set(int mode, char *packet) {
+    // Copy mode to packet.
+    strcpy(packet + packet_pos, mode == 1 ? "octet" : "netascii");
+    // Increment pointer position in packet.
+    packet_pos += strlen(mode == 1 ? "octet" : "netascii");
+}
+
+char *mode_get(char *packet) {
+    char *mode = malloc(MAX_STR_LEN);
+    if (mode == NULL) {
+        error_exit("Mode malloc failed.");
+    }
+    // Copy mode from packet.
+    strcpy(mode, packet + packet_pos);
+    // Increment pointer position in packet.
+    packet_pos += strlen(mode) + 1;
+    return mode;
+}
+
+void empty_byte_insert(char *packet) {
+    memcpy(packet + packet_pos, "\0", 1);
+    packet_pos++;
+}
+
+char *opcode_to_str(int opcode) {
+    switch (opcode) {
+        case RRQ:
+            return "RRQ";
+        case WRQ:
+            return "WRQ";
+        case DATA:
+            return "DATA";
+        case ACK:
+            return "ACK";
+        case ERROR:
+            return "ERROR";
+        default:
+            return "UNKNOWN";
+    }
 }

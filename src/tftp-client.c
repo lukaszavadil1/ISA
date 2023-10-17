@@ -32,8 +32,12 @@ int main(int argc, char *argv[]) {
     }
     init_args(client_args);
 
+    // Default opcode.
+    int opcode = WRQ;
+    packet_pos = 0;
+
     // Parse command line arguments.
-    parse_args(argc, argv, client_args);
+    parse_args(argc, argv, client_args, &opcode);
 
     // Packet from client.
     char packet[MAX_PACKET_SIZE];
@@ -52,21 +56,45 @@ int main(int argc, char *argv[]) {
     // Convert IP address from text to binary form.
     inet_pton(AF_INET, client_args->host_name, &server_address.sin_addr);
 
+    // Filling packet with opcode, filename and mode.
+    opcode_set(opcode, packet);
+    file_name_set(opcode == WRQ ? client_args->dest_file_path : client_args->file_path, packet);
+    empty_byte_insert(packet);
+    mode_set(1, packet); // Set octet mode.
+    empty_byte_insert(packet);
+
+    char *opcode_str = opcode_to_str(opcode);
+    if (opcode_str == NULL) {
+        error_exit("Opcode to string conversion failed.");
+    }
+    printf("#########################################\n");
+    printf("Packet info: Sending packet to server\n\n");
+    printf("Opcode: %s\n", opcode_str);
+    printf("File name: %s\n", opcode == WRQ ? client_args->dest_file_path : client_args->file_path);
+    printf("Mode: octet\n");
+    printf("#########################################\n\n");
+
     // Send data to the server.
-    if (sendto(sock_fd, packet, strlen(packet), MSG_CONFIRM,
+    if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM,
                (const struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
         error_exit("Sendto failed on client side.");
     }
-    printf("Data sent.\n");
     memset(&packet, 0, MAX_PACKET_SIZE);
-    if (recvfrom(sock_fd, (char *)packet, 4, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
+    packet_pos = 0;
+    if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
         error_exit("Recvfrom failed on client side.");
     }
-    printf("Ack received.\n");
+    packet_pos = 0;
+    opcode = opcode_get(packet);
+    opcode_str = opcode_to_str(opcode);
+    printf("#########################################\n");
+    printf("Packet info: Received packet from server\n\n");
+    printf("Opcode: %s\n", opcode_str);
+    printf("#########################################\n\n");
 
     // Free client arguments structure and its members.
     free_args(client_args);
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 void init_args(ClientArgs_t *client_args) {
@@ -86,7 +114,7 @@ void free_args(ClientArgs_t *client_args) {
     free(client_args);
 }
 
-void parse_args(int argc, char *argv[], ClientArgs_t *client_args) {
+void parse_args(int argc, char *argv[], ClientArgs_t *client_args, int *opcode) {
     if (argc == 1) {
         display_client_help();
         exit(EXIT_SUCCESS);
@@ -118,6 +146,7 @@ void parse_args(int argc, char *argv[], ClientArgs_t *client_args) {
                     error_exit("Duplicate flag -f.");
                 }
                 strcpy(client_args->file_path, optarg);
+                *opcode = RRQ;
                 f_flag = true;
                 break;
             case 't':
@@ -142,7 +171,7 @@ void parse_args(int argc, char *argv[], ClientArgs_t *client_args) {
     if (h_flag == false) {
         error_exit("Missing flag -h.");
     }
-    if (f_flag == false) {
-        error_exit("Missing flag -f.");
+    if (t_flag == false) {
+        error_exit("Missing flag -t.");
     }
 }

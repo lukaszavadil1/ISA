@@ -30,6 +30,8 @@ int main(int argc, char *argv[]) {
     // Client address and its size.           
     struct sockaddr client_address;                  
     size_t client_address_size = sizeof(client_address);
+
+    int opcode;
     
     // Initialize server arguments structure and its members.
     ServerArgs_t *server_args;
@@ -68,12 +70,31 @@ int main(int argc, char *argv[]) {
                       (socklen_t *) &client_address_size)) < 0) {
             error_exit("Recvfrom failed on server side.");
         }
+        opcode = opcode_get(packet);
+        char *opcode_str = opcode_to_str(opcode);
+        if (opcode_str == NULL) {
+            error_exit("Opcode to string conversion failed.");
+        }
+        printf("#########################################\n");
+        printf("Packet info: Received packet from client\n\n");
+        printf("Opcode: %s\n", opcode_str);
+        printf("File name: %s\n", file_name_get(packet));
+        printf("Mode: %s\n", mode_get(packet));
+        printf("#########################################\n\n");
         pid = fork();
         if (pid < 0) {
             error_exit("Server fork failed.");
         }
         else if (pid == 0) {
-            if (sendto(sock_fd, packet, strlen(packet), MSG_CONFIRM, (struct sockaddr *)&client_address,
+            memset(packet, 0, MAX_PACKET_SIZE);
+            packet_pos = 0;
+            opcode_set(ACK, packet);
+            opcode_str = opcode_to_str(ACK);
+            printf("#########################################\n");
+            printf("Packet info: Sending packet to client\n\n");
+            printf("Opcode: %s\n", opcode_str);
+            printf("#########################################\n\n");
+            if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
                         client_address_size) < 0) {
                 error_exit("Sendto failed on server side.");
             }
@@ -81,8 +102,6 @@ int main(int argc, char *argv[]) {
         }
         else {
             // Parent process.
-            printf("Received data from client.\n");
-            printf("Forked child process with pid: %d\n", pid);
         }
     }
 }
