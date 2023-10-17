@@ -18,6 +18,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <unistd.h>
+#include <signal.h>
 
 // Maximal length of string.
 #define MAX_STR_LEN 512
@@ -72,5 +74,14 @@ void display_server_help();
 * @return Socket file descriptor.
 */
 int create_socket();
+
+/**
+* @brief Handle SIGINT signal.
+*
+* @param sig Signal number.
+*
+* @return void
+*/
+void sigint_handler(int sig);
 
 #endif // UTILS_H

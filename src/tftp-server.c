@@ -58,25 +58,33 @@ int main(int argc, char *argv[]) {
         error_exit("Failed to bind server socket.");
     }
 
+    // Process id
+    pid_t pid;
+
     // Listen for incoming client connections.
     while (true) {
+        signal(SIGINT, sigint_handler);
         if ((recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                       (socklen_t *) &client_address_size)) < 0) {
             error_exit("Recvfrom failed on server side.");
         }
-        printf("Received packet.\n");
-        printf("Packet data: %s\n", packet);
-        memset(&packet, 0, MAX_PACKET_SIZE);
-        if (sendto(sock_fd, packet, MAX_PACKET_SIZE, MSG_CONFIRM, (const struct sockaddr *)&client_address,
-                   client_address_size) < 0) {
-            error_exit("Sendto failed on server side.");
+        pid = fork();
+        if (pid < 0) {
+            error_exit("Server fork failed.");
         }
-        printf("Sent ack.\n");
+        else if (pid == 0) {
+            if (sendto(sock_fd, packet, strlen(packet), MSG_CONFIRM, (struct sockaddr *)&client_address,
+                        client_address_size) < 0) {
+                error_exit("Sendto failed on server side.");
+            }
+            exit(EXIT_SUCCESS);
+        }
+        else {
+            // Parent process.
+            printf("Received data from client.\n");
+            printf("Forked child process with pid: %d\n", pid);
+        }
     }
-
-    // Free server arguments structure and its members.
-    free_args(server_args);
-    return 0;
 }
 
 void init_args(ServerArgs_t *server_args) {

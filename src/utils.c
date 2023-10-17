@@ -22,7 +22,6 @@ int parse_port(char *port_str) {
     if (*endptr != '\0' || port > 65535 || port < 1) {
         error_exit("Invalid port number.");
     }
-    free(endptr);
     return port;
 }
 
@@ -48,4 +47,9 @@ int create_socket() {
         error_exit("Failed to create socket.");
     }
     return sock_fd;
+}
+
+void sigint_handler(int sig) {
+    printf("\nSIGINT (signal %d) received. Exiting...\n", sig);
+    exit(EXIT_SUCCESS);
 }
