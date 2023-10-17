@@ -19,9 +19,6 @@
 *
 */
 int main(int argc, char *argv[]) {
-    // Socket file descriptor.
-    int sock_fd;              
-
     // Server address.                           
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
@@ -42,10 +39,7 @@ int main(int argc, char *argv[]) {
     // Parse command line arguments.
     parse_args(argc, argv, server_args);
 
-    // Create socket.
-    if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        error_exit("Failed to create socket.");
-    }
+    int sock_fd = create_socket();
 
     // Set Ipv4 address family.
     server_addr.sin_family = AF_INET;
@@ -53,22 +47,28 @@ int main(int argc, char *argv[]) {
     // Set port number.
     server_addr.sin_port = htons(server_args->port);
 
-    // Set address to any interface.
+    // Bind to all interfaces.
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    // Bind socket to the  server address and port.
+    // Bind socket to the server address and port.
     if (bind(sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        error_exit("Failed to bind socket.");
+        error_exit("Failed to bind server socket.");
     }
 
     // Listen for incoming client connections.
     while (true) {
         if ((recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                       (socklen_t *) &client_address_size)) < 0) {
-            error_exit("handle_request(): recvfrom failed");
+            error_exit("Recvfrom failed on server side.");
         }
         printf("Received packet.\n");
         printf("Packet data: %s\n", packet);
+        memset(&packet, 0, MAX_PACKET_SIZE);
+        if (sendto(sock_fd, packet, MAX_PACKET_SIZE, MSG_CONFIRM, (const struct sockaddr *)&client_address,
+                   client_address_size) < 0) {
+            error_exit("Sendto failed on server side.");
+        }
+        printf("Sent ack.\n");
     }
 
     // Free server arguments structure and its members.
@@ -100,7 +100,7 @@ void parse_args(int argc, char *argv[], ServerArgs_t *server_args) {
         switch (opt) {
             case 'p':
                 if (p_flag) {
-                    error_exit("Duplicate option.");
+                    error_exit("Duplicate flag -p.");
                 }
                 server_args->port = parse_port(optarg);
                 p_flag = true;

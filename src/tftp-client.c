@@ -19,11 +19,10 @@
 *
 */
 int main(int argc, char *argv[]) {
-    // Socket file descriptor.
-    int sock_fd;
-
     // Server address.
     struct sockaddr_in server_address;
+    memset(&server_address, 0, sizeof(server_address));
+    size_t server_address_size = sizeof(server_address);
 
     // Initialize client arguments structure and its members.
     ClientArgs_t *client_args;
@@ -33,36 +32,34 @@ int main(int argc, char *argv[]) {
     // Parse command line arguments.
     parse_args(argc, argv, client_args);
 
-    // Packet payload.
-    char payload[MAX_PACKET_SIZE];
-    memset(&payload, 0, MAX_PACKET_SIZE);
-    strcpy(payload, client_args->file_path);
+    // Packet from client.
+    char packet[MAX_PACKET_SIZE];
+    memset(&packet, 0, MAX_PACKET_SIZE);
+    strcpy(packet, client_args->file_path);
 
     // Create socket.
-    if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        error_exit("Failed to create socket.");
-    }
+    int sock_fd = create_socket();
 
-    // Set Ipv4 address family.
+    // Set server Ipv4 address family.
     server_address.sin_family = AF_INET;
 
-    // Set port number.
+    // Set server port number.
     server_address.sin_port = htons(client_args->port);
 
     // Convert IP address from text to binary form.
     inet_pton(AF_INET, client_args->host_name, &server_address.sin_addr);
 
-    // Create socket.
-    if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        error_exit("Failed to create socket.");
-    }
-
     // Send data to the server.
-    if (sendto(sock_fd, payload, strlen(payload), MSG_CONFIRM,
+    if (sendto(sock_fd, packet, strlen(packet), MSG_CONFIRM,
                (const struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
-        error_exit("Sendto failed.");
+        error_exit("Sendto failed on client side.");
     }
     printf("Data sent.\n");
+    memset(&packet, 0, MAX_PACKET_SIZE);
+    if (recvfrom(sock_fd, (char *)packet, 4, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
+        error_exit("Recvfrom failed on client side.");
+    }
+    printf("Ack received.\n");
 
     // Free client arguments structure and its members.
     free_args(client_args);
@@ -97,14 +94,14 @@ void parse_args(int argc, char *argv[], ClientArgs_t *client_args) {
         switch (opt) {
             case 'h':
                 if (h_flag) {
-                    error_exit("Duplicate option.");
+                    error_exit("Duplicate flag -h.");
                 }
                 strcpy(client_args->host_name, optarg);
                 h_flag = true;
                 break;
             case 'p':
                 if (p_flag) {
-                    error_exit("Duplicate option.");
+                    error_exit("Duplicate flag -p.");
                 }
                 int port = parse_port(optarg);
                 client_args->port = port;
@@ -112,14 +109,14 @@ void parse_args(int argc, char *argv[], ClientArgs_t *client_args) {
                 break;
             case 'f':
                 if (f_flag) {
-                    error_exit("Duplicate option.");
+                    error_exit("Duplicate flag -f.");
                 }
                 strcpy(client_args->file_path, optarg);
                 f_flag = true;
                 break;
             case 't':
                 if (t_flag) {
-                    error_exit("Duplicate option.");
+                    error_exit("Duplicate flag -t.");
                 }
                 strcpy(client_args->dest_file_path, optarg);
                 t_flag = true;
@@ -129,7 +126,6 @@ void parse_args(int argc, char *argv[], ClientArgs_t *client_args) {
                 break;
             default:
                 error_exit("Argument error.");
-                break;
         }
         if (argv[optind] != NULL) {
             if ((strcmp(argv[optind], "-h") != 0) && (strcmp(argv[optind], "-p") != 0) && (strcmp(argv[optind], "-f") != 0) && (strcmp(argv[optind], "-t") != 0)) {
@@ -137,7 +133,10 @@ void parse_args(int argc, char *argv[], ClientArgs_t *client_args) {
             }
         }
     }
-    if (h_flag == false || t_flag == false) {
-        error_exit("Missing mandatory argument.");
+    if (h_flag == false) {
+        error_exit("Missing flag -h.");
+    }
+    if (f_flag == false) {
+        error_exit("Missing flag -f.");
     }
 }

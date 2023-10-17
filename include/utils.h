@@ -66,4 +66,11 @@ void display_client_help();
 */
 void display_server_help();
 
+/**
+* @brief Create unbouded socket.
+*
+* @return Socket file descriptor.
+*/
+int create_socket();
+
 #endif // UTILS_H

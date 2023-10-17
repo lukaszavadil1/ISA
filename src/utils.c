@@ -9,11 +9,7 @@
 #include "../include/utils.h"
 
 void error_exit(const char *message) {
-    if (errno == 0) {
-        fprintf(stderr, "Error: %s\n", message);
-    } else {
-        fprintf(stderr, "Error: %s (%s)\n", message, strerror(errno));
-    }
+    (errno == 0) ? fprintf(stderr, "Error: %s\n", message) : fprintf(stderr, "Error: %s (%s)\n", message, strerror(errno));
     exit(EXIT_FAILURE);
 }
 
@@ -40,4 +36,12 @@ void display_server_help() {
     printf("Options:\n");
     printf("  -p  Port number of the TFTP server.\n");
     printf("  -d  Path to the directory with files.\n");
+}
+
+int create_socket() {
+    int sock_fd;
+    if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        error_exit("Failed to create socket.");
+    }
+    return sock_fd;
 }
