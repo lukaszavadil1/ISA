@@ -34,6 +34,9 @@ int main(int argc, char *argv[]) {
     // Initialize server arguments structure and its members.
     ServerArgs_t *server_args;
     server_args = malloc(sizeof(ServerArgs_t));
+    if (server_args == NULL) {
+        error_exit("Server args structure malloc failed.");
+    }
     init_args(server_args);
 
     // Parse command line arguments.
@@ -79,6 +82,9 @@ int main(int argc, char *argv[]) {
 void init_args(ServerArgs_t *server_args) {
     server_args->port = DEFAULT_PORT_NUM;
     server_args->dir_path = malloc(MAX_STR_LEN);
+    if (server_args->dir_path == NULL) {
+        error_exit("Server args dir path malloc failed.");
+    }
 }
 
 void free_args(ServerArgs_t *server_args) {

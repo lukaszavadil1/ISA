@@ -27,6 +27,9 @@ int main(int argc, char *argv[]) {
     // Initialize client arguments structure and its members.
     ClientArgs_t *client_args;
     client_args = malloc(sizeof(ClientArgs_t));
+    if (client_args == NULL) {
+        error_exit("Client args structure malloc failed.");
+    }
     init_args(client_args);
 
     // Parse command line arguments.
@@ -71,6 +74,9 @@ void init_args(ClientArgs_t *client_args) {
     client_args->port = DEFAULT_PORT_NUM;
     client_args->file_path = malloc(MAX_STR_LEN);
     client_args->dest_file_path = malloc(MAX_STR_LEN);
+    if (client_args->host_name == NULL || client_args->file_path == NULL || client_args->dest_file_path == NULL) {
+        error_exit("Client args member malloc failed.");
+    }
 }
 
 void free_args(ClientArgs_t *client_args) {

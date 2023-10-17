@@ -15,10 +15,14 @@ void error_exit(const char *message) {
 
 int parse_port(char *port_str) {
     char *endptr = malloc(MAX_STR_LEN);
+    if (endptr == NULL) {
+        error_exit("Port string malloc failed.");
+    }
     int port = (int)strtol(port_str, &endptr, 10);
     if (*endptr != '\0' || port > 65535 || port < 1) {
         error_exit("Invalid port number.");
     }
+    free(endptr);
     return port;
 }
 
