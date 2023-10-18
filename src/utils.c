@@ -10,6 +10,10 @@
 
 int packet_pos = 0;
 
+bool timeout_flag = false, tsize_flag = false, blksize_flag = false;
+
+long int options[3] = {0, 0, 0};
+
 void error_exit(const char *message) {
     (errno == 0) ? fprintf(stderr, "Error: %s\n", message) : fprintf(stderr, "Error: %s (%s)\n", message, strerror(errno));
     exit(EXIT_FAILURE);
@@ -131,7 +135,50 @@ char *opcode_to_str(int opcode) {
             return "ACK";
         case ERROR:
             return "ERROR";
+        case OACK:
+            return "OACK";
         default:
             return "UNKNOWN";
     }
+}
+
+void load_options(char *packet) {
+    char *endptr;
+    int index = 0;
+
+    if (strcmp(packet + packet_pos, "timeout") == 0) {
+        if (timeout_flag) {
+            error_exit("Duplicate timeout option.");
+        }
+        timeout_flag = true;
+        index = TIMEOUT;
+        packet_pos += strlen("timeout");
+    }
+    else if (strcmp(packet + packet_pos, "tsize") == 0) {
+        if (tsize_flag) {
+            error_exit("Duplicate tsize option.");
+        }
+        tsize_flag = true;
+        index = TSIZE;
+        packet_pos += strlen("tsize");
+    }
+    else if (strcmp(packet + packet_pos, "blksize") == 0) {
+        if (blksize_flag) {
+            error_exit("Duplicate blksize option.");
+        }
+        blksize_flag = true;
+        index = BLKSIZE;
+        packet_pos += strlen("blksize");
+    }
+    else {
+        error_exit("Invalid option.");
+    }
+    packet_pos++;
+    
+    options[index] = strtol(packet + packet_pos, &endptr, 10);
+    if (*endptr != '\0') {
+        error_exit("Invalid option value.");
+    }
+    packet_pos += strlen(packet + packet_pos);
+    packet_pos++;
 }

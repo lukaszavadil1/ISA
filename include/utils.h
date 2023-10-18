@@ -33,10 +33,18 @@
 #define ERROR 5
 #define OACK 6
 
+#define TIMEOUT 0
+#define TSIZE 1
+#define BLKSIZE 2
+
 // Default port number
 #define DEFAULT_PORT_NUM 69
 
 extern int packet_pos;
+
+extern bool timeout_flag, tsize_flag, blksize_flag;
+
+extern long int options[3];
 
 /**
 * @brief Prints error message and exits program.
@@ -160,5 +168,7 @@ void empty_byte_insert(char *packet);
 * @return Opcode string.
 */
 char *opcode_to_str(int opcode);
+
+void load_options(char *packet);
 
 #endif // UTILS_H

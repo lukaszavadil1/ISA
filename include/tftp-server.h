@@ -48,4 +48,8 @@ void free_args(ServerArgs_t *server_args);
 */
 void parse_args(int argc, char *argv[], ServerArgs_t *server_args);
 
+void handle_client_request(char *packet, int *opcode, char *file_name, char *mode);
+
+void print_client_request(int opcode, char *file_name, char *mode);
+
 #endif // TFTP_SERVER_H

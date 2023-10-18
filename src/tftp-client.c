@@ -8,6 +8,33 @@
 
 #include "../include/tftp-client.h"
 
+void add_options(char *packet) {
+    uint8_t end_string = 0;
+
+    strcpy(packet + packet_pos, "timeout");
+    packet_pos += 7;
+    memcpy(packet + packet_pos, &end_string, 1);
+    packet_pos++;
+    strcpy(packet + packet_pos, "255");
+    packet_pos += 3;
+    memcpy(packet + packet_pos, &end_string, 1);
+    packet_pos++;
+
+
+    strcpy(packet + packet_pos, "tsize");
+    packet_pos += 5;
+    memcpy(packet + packet_pos, &end_string, 1);
+    packet_pos++;
+    strcpy(packet + packet_pos, "65535");
+    packet_pos += 5;
+    memcpy(packet + packet_pos, &end_string, 1);
+    packet_pos++;
+
+    printf("\tOptions:\n");
+    printf("\t\tTimeout: 255\n");
+    printf("\t\tTsize: 65535\n");
+}
+
 /**
 *
 * @brief Main function of TFTP client.
@@ -35,6 +62,11 @@ int main(int argc, char *argv[]) {
     // Default opcode.
     int opcode = WRQ;
     packet_pos = 0;
+    int client_block_num = 0;
+    int server_block_num = 0;
+    timeout_flag = false;
+    tsize_flag = false;
+    blksize_flag = false;
 
     // Parse command line arguments.
     parse_args(argc, argv, client_args, &opcode);
@@ -62,6 +94,7 @@ int main(int argc, char *argv[]) {
     empty_byte_insert(packet);
     mode_set(1, packet); // Set octet mode.
     empty_byte_insert(packet);
+    add_options(packet);
 
     char *opcode_str = opcode_to_str(opcode);
     if (opcode_str == NULL) {
@@ -81,11 +114,14 @@ int main(int argc, char *argv[]) {
     }
     memset(&packet, 0, MAX_PACKET_SIZE);
     packet_pos = 0;
+
+
     if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
         error_exit("Recvfrom failed on client side.");
     }
     packet_pos = 0;
     opcode = opcode_get(packet);
+
     opcode_str = opcode_to_str(opcode);
     printf("#########################################\n");
     printf("Packet info: Received packet from server\n\n");

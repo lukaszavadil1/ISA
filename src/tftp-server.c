@@ -70,38 +70,117 @@ int main(int argc, char *argv[]) {
                       (socklen_t *) &client_address_size)) < 0) {
             error_exit("Recvfrom failed on server side.");
         }
-        opcode = opcode_get(packet);
-        char *opcode_str = opcode_to_str(opcode);
-        if (opcode_str == NULL) {
-            error_exit("Opcode to string conversion failed.");
-        }
-        printf("#########################################\n");
-        printf("Packet info: Received packet from client\n\n");
-        printf("Opcode: %s\n", opcode_str);
-        printf("File name: %s\n", file_name_get(packet));
-        printf("Mode: %s\n", mode_get(packet));
-        printf("#########################################\n\n");
         pid = fork();
         if (pid < 0) {
             error_exit("Server fork failed.");
         }
         else if (pid == 0) {
+            char file_name[MAX_STR_LEN];
+            char mode[MAX_STR_LEN];
+            int opcode;
+            char *opcode_str;
+            int client_block_num = 0;
+            int server_block_num = 0;
+            timeout_flag = false;
+            tsize_flag = false;
+            blksize_flag = false;
+            packet_pos = 0;
+
+            handle_client_request(packet, &opcode, file_name, mode);
+            print_client_request(opcode, file_name, mode);
+
             memset(packet, 0, MAX_PACKET_SIZE);
             packet_pos = 0;
-            opcode_set(ACK, packet);
-            opcode_str = opcode_to_str(ACK);
-            printf("#########################################\n");
-            printf("Packet info: Sending packet to client\n\n");
-            printf("Opcode: %s\n", opcode_str);
-            printf("#########################################\n\n");
-            if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
-                        client_address_size) < 0) {
-                error_exit("Sendto failed on server side.");
+            if (opcode == RRQ) {
+                if (timeout_flag || tsize_flag || blksize_flag) {
+                    // Send OACK packet.
+                    opcode_set(OACK, packet);
+                    opcode_str = opcode_to_str(OACK);
+                    printf("#########################################\n");
+                    printf("Packet info: Sending packet to client\n\n");
+                    printf("Opcode: %s\n", opcode_str);
+                    printf("Options:\n");
+                    if (timeout_flag) {
+                        printf("Timeout: %ld\n", options[0]);
+                    }
+                    if (tsize_flag) {
+                        printf("Tsize: %ld\n", options[1]);
+                    }
+                    if (blksize_flag) {
+                        printf("Blksize: %ld\n", options[2]);
+                    }
+                    printf("#########################################\n\n");
+                    if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
+                                client_address_size) < 0) {
+                        error_exit("Sendto failed on server side.");
+                    }
+                    memset(packet, 0, MAX_PACKET_SIZE);
+                    packet_pos = 0;
+                }
+                else {
+                    // Send ACK packet.
+                    opcode_set(ACK, packet);
+                    opcode_str = opcode_to_str(ACK);
+                    printf("#########################################\n");
+                    printf("Packet info: Sending packet to client\n\n");
+                    printf("Opcode: %s\n", opcode_str);
+                    printf("#########################################\n\n");
+                    if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
+                                client_address_size) < 0) {
+                        error_exit("Sendto failed on server side.");
+                    }
+                    memset(packet, 0, MAX_PACKET_SIZE);
+                    packet_pos = 0;
+                }
             }
-            exit(EXIT_SUCCESS);
+            else if (opcode == WRQ) {
+                if (timeout_flag || tsize_flag || blksize_flag) {
+                    // Send OACK packet.
+                    opcode_set(OACK, packet);
+                    opcode_str = opcode_to_str(OACK);
+                    printf("#########################################\n");
+                    printf("Packet info: Sending packet to client\n\n");
+                    printf("Opcode: %s\n", opcode_str);
+                    printf("Options:\n");
+                    if (timeout_flag) {
+                        printf("Timeout: %ld\n", options[0]);
+                    }
+                    if (tsize_flag) {
+                        printf("Tsize: %ld\n", options[1]);
+                    }
+                    if (blksize_flag) {
+                        printf("Blksize: %ld\n", options[2]);
+                    }
+                    printf("#########################################\n\n");
+                    if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
+                                client_address_size) < 0) {
+                        error_exit("Sendto failed on server side.");
+                    }
+                    memset(packet, 0, MAX_PACKET_SIZE);
+                    packet_pos = 0;
+                }
+                else {
+                    // Send ACK packet.
+                    opcode_set(ACK, packet);
+                    opcode_str = opcode_to_str(ACK);
+                    printf("#########################################\n");
+                    printf("Packet info: Sending packet to client\n\n");
+                    printf("Opcode: %s\n", opcode_str);
+                    printf("#########################################\n\n");
+                    if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
+                                client_address_size) < 0) {
+                        error_exit("Sendto failed on server side.");
+                    }
+                    memset(packet, 0, MAX_PACKET_SIZE);
+                    packet_pos = 0;
+                }
+            }
+            else {
+                error_exit("Invalid opcode, server expected RRQ or WRQ.");
+            }
         }
         else {
-            // Parent process.
+
         }
     }
 }
@@ -148,4 +227,41 @@ void parse_args(int argc, char *argv[], ServerArgs_t *server_args) {
     else {
         error_exit("Missing directory path.");
     }
+}
+
+void handle_client_request(char *packet, int *opcode, char *file_name, char *mode) {
+    *opcode = opcode_get(packet);
+    if (*opcode != RRQ && *opcode != WRQ) {
+        error_exit("Invalid opcode, server expected RRQ or WRQ.");
+    }
+    strcpy(file_name, file_name_get(packet));
+    strcpy(mode, mode_get(packet));
+    while (packet[packet_pos] != '\0') {
+        load_options(packet);
+    }
+}
+
+void print_client_request(int opcode, char *file_name, char *mode) {
+    char *opcode_str = opcode_to_str(opcode);
+    if (opcode_str == NULL) {
+        error_exit("Opcode to string conversion failed.");
+    }
+    printf("#########################################\n");
+    printf("Client request info:\n\n");
+    printf("Opcode: %s\n", opcode_str);
+    printf("File name: %s\n", file_name);
+    printf("Mode: %s\n", mode);
+    if (timeout_flag || tsize_flag || blksize_flag) {
+        printf("Options:\n");
+    }
+    if (timeout_flag) {
+        printf("Timeout: %ld\n", options[0]);
+    }
+    if (tsize_flag) {
+        printf("Tsize: %ld\n", options[1]);
+    }
+    if (blksize_flag) {
+        printf("Blksize: %ld\n", options[2]);
+    }
+    printf("#########################################\n\n");
 }
