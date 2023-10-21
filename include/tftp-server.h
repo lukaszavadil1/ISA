@@ -48,8 +48,27 @@ void free_args(ServerArgs_t *server_args);
 */
 void parse_args(int argc, char *argv[], ServerArgs_t *server_args);
 
+/**
+* @brief Handle client's initial request.
+*
+* @param packet Pointer to packet.
+* @param opcode Opcode.
+* @param file_name File name.
+* @param mode Mode.
+*
+* @return void
+*/
 void handle_client_request(char *packet, int *opcode, char *file_name, char *mode);
 
+/**
+* @brief Print client's initial request.
+*
+* @param opcode Opcode.
+* @param file_name File name.
+* @param mode Mode.
+*
+* @return void
+*/
 void print_client_request(int opcode, char *file_name, char *mode);
 
 #endif // TFTP_SERVER_H

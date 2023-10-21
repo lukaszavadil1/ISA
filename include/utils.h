@@ -36,15 +36,23 @@
 #define TIMEOUT 0
 #define TSIZE 1
 #define BLKSIZE 2
+#define TIMEOUT_NAME "timeout"
+#define TSIZE_NAME "tsize"
+#define BLKSIZE_NAME "blksize"
+#define NUM_OPTIONS 3
 
 // Default port number
 #define DEFAULT_PORT_NUM 69
 
 extern int packet_pos;
 
-extern bool timeout_flag, tsize_flag, blksize_flag;
+// Struct for options.
+typedef struct Option {
+    bool flag;
+    long int value;
+} Option_t;
 
-extern long int options[3];
+extern Option_t options[NUM_OPTIONS];
 
 /**
 * @brief Prints error message and exits program.
@@ -169,6 +177,32 @@ void empty_byte_insert(char *packet);
 */
 char *opcode_to_str(int opcode);
 
-void load_options(char *packet);
+void option_set(int type, long int value);
+
+bool option_get_flag(int type);
+
+long int option_get_value(int type);
+
+char *option_get_name(int type);
+
+int option_get_type(char *name);
+
+/**
+* @brief Load options from packet.
+*
+* @param packet Pointer to packet.
+*
+* @return void
+*/
+void options_load(char *packet);
+
+/**
+* @brief Set options in packet.
+*
+* @param packet Pointer to packet.
+*
+* @return void
+*/
+void options_set(char *packet);
 
 #endif // UTILS_H

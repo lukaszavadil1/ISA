@@ -29,10 +29,6 @@ void add_options(char *packet) {
     packet_pos += 5;
     memcpy(packet + packet_pos, &end_string, 1);
     packet_pos++;
-
-    printf("\tOptions:\n");
-    printf("\t\tTimeout: 255\n");
-    printf("\t\tTsize: 65535\n");
 }
 
 /**
@@ -64,9 +60,6 @@ int main(int argc, char *argv[]) {
     packet_pos = 0;
     int client_block_num = 0;
     int server_block_num = 0;
-    timeout_flag = false;
-    tsize_flag = false;
-    blksize_flag = false;
 
     // Parse command line arguments.
     parse_args(argc, argv, client_args, &opcode);
@@ -112,16 +105,15 @@ int main(int argc, char *argv[]) {
                (const struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
         error_exit("Sendto failed on client side.");
     }
+
     memset(&packet, 0, MAX_PACKET_SIZE);
     packet_pos = 0;
-
 
     if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
         error_exit("Recvfrom failed on client side.");
     }
     packet_pos = 0;
     opcode = opcode_get(packet);
-
     opcode_str = opcode_to_str(opcode);
     printf("#########################################\n");
     printf("Packet info: Received packet from server\n\n");

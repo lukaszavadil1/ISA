@@ -30,8 +30,6 @@ int main(int argc, char *argv[]) {
     // Client address and its size.           
     struct sockaddr client_address;                  
     size_t client_address_size = sizeof(client_address);
-
-    int opcode;
     
     // Initialize server arguments structure and its members.
     ServerArgs_t *server_args;
@@ -65,11 +63,14 @@ int main(int argc, char *argv[]) {
 
     // Listen for incoming client connections.
     while (true) {
+        
         signal(SIGINT, sigint_handler);
+
         if ((recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                       (socklen_t *) &client_address_size)) < 0) {
             error_exit("Recvfrom failed on server side.");
         }
+
         pid = fork();
         if (pid < 0) {
             error_exit("Server fork failed.");
@@ -77,13 +78,10 @@ int main(int argc, char *argv[]) {
         else if (pid == 0) {
             char file_name[MAX_STR_LEN];
             char mode[MAX_STR_LEN];
-            int opcode;
             char *opcode_str;
             int client_block_num = 0;
             int server_block_num = 0;
-            timeout_flag = false;
-            tsize_flag = false;
-            blksize_flag = false;
+            int opcode = 0;
             packet_pos = 0;
 
             handle_client_request(packet, &opcode, file_name, mode);
@@ -92,22 +90,23 @@ int main(int argc, char *argv[]) {
             memset(packet, 0, MAX_PACKET_SIZE);
             packet_pos = 0;
             if (opcode == RRQ) {
-                if (timeout_flag || tsize_flag || blksize_flag) {
+                if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     // Send OACK packet.
                     opcode_set(OACK, packet);
                     opcode_str = opcode_to_str(OACK);
+                    options_set(packet);
                     printf("#########################################\n");
                     printf("Packet info: Sending packet to client\n\n");
                     printf("Opcode: %s\n", opcode_str);
                     printf("Options:\n");
-                    if (timeout_flag) {
-                        printf("Timeout: %ld\n", options[0]);
+                    if (options[TIMEOUT].flag) {
+                        printf("Timeout: %ld\n", options[TIMEOUT].value);
                     }
-                    if (tsize_flag) {
-                        printf("Tsize: %ld\n", options[1]);
+                    if (options[TSIZE].flag) {
+                        printf("Tsize: %ld\n", options[TSIZE].value);
                     }
-                    if (blksize_flag) {
-                        printf("Blksize: %ld\n", options[2]);
+                    if (options[BLKSIZE].flag) {
+                        printf("Blksize: %ld\n", options[BLKSIZE].value);
                     }
                     printf("#########################################\n\n");
                     if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
@@ -134,22 +133,23 @@ int main(int argc, char *argv[]) {
                 }
             }
             else if (opcode == WRQ) {
-                if (timeout_flag || tsize_flag || blksize_flag) {
+                if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     // Send OACK packet.
                     opcode_set(OACK, packet);
+                    options_set(packet);
                     opcode_str = opcode_to_str(OACK);
                     printf("#########################################\n");
                     printf("Packet info: Sending packet to client\n\n");
                     printf("Opcode: %s\n", opcode_str);
                     printf("Options:\n");
-                    if (timeout_flag) {
-                        printf("Timeout: %ld\n", options[0]);
+                    if (options[TIMEOUT].flag) {
+                        printf("Timeout: %ld\n", options[TIMEOUT].value);
                     }
-                    if (tsize_flag) {
-                        printf("Tsize: %ld\n", options[1]);
+                    if (options[TSIZE].flag) {
+                        printf("Tsize: %ld\n", options[TSIZE].value);
                     }
-                    if (blksize_flag) {
-                        printf("Blksize: %ld\n", options[2]);
+                    if (options[BLKSIZE].flag) {
+                        printf("Blksize: %ld\n", options[BLKSIZE].value);
                     }
                     printf("#########################################\n\n");
                     if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
@@ -236,9 +236,7 @@ void handle_client_request(char *packet, int *opcode, char *file_name, char *mod
     }
     strcpy(file_name, file_name_get(packet));
     strcpy(mode, mode_get(packet));
-    while (packet[packet_pos] != '\0') {
-        load_options(packet);
-    }
+    options_load(packet);
 }
 
 void print_client_request(int opcode, char *file_name, char *mode) {
@@ -251,17 +249,17 @@ void print_client_request(int opcode, char *file_name, char *mode) {
     printf("Opcode: %s\n", opcode_str);
     printf("File name: %s\n", file_name);
     printf("Mode: %s\n", mode);
-    if (timeout_flag || tsize_flag || blksize_flag) {
+    if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
         printf("Options:\n");
     }
-    if (timeout_flag) {
-        printf("Timeout: %ld\n", options[0]);
+    if (options[TIMEOUT].flag) {
+        printf("Timeout: %ld\n", options[TIMEOUT].value);
     }
-    if (tsize_flag) {
-        printf("Tsize: %ld\n", options[1]);
+    if (options[TSIZE].flag) {
+        printf("Tsize: %ld\n", options[TSIZE].value);
     }
-    if (blksize_flag) {
-        printf("Blksize: %ld\n", options[2]);
+    if (options[BLKSIZE].flag) {
+        printf("Blksize: %ld\n", options[BLKSIZE].value);
     }
     printf("#########################################\n\n");
 }

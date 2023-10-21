@@ -10,9 +10,20 @@
 
 int packet_pos = 0;
 
-bool timeout_flag = false, tsize_flag = false, blksize_flag = false;
-
-long int options[3] = {0, 0, 0};
+Option_t options[NUM_OPTIONS] = {
+    [TIMEOUT] = {
+        .flag = false,
+        .value = 1
+    },
+    [TSIZE] = {
+        .flag = false,
+        .value = 0
+    },
+    [BLKSIZE] = {
+        .flag = false,
+        .value = 512
+    }
+};
 
 void error_exit(const char *message) {
     (errno == 0) ? fprintf(stderr, "Error: %s\n", message) : fprintf(stderr, "Error: %s (%s)\n", message, strerror(errno));
@@ -142,43 +153,84 @@ char *opcode_to_str(int opcode) {
     }
 }
 
-void load_options(char *packet) {
-    char *endptr;
-    int index = 0;
+// Define functions for setting and getting options.
+void option_set(int type, long int value) {
+    options[type].flag = true;
+    options[type].value = value;
+}
 
-    if (strcmp(packet + packet_pos, "timeout") == 0) {
-        if (timeout_flag) {
-            error_exit("Duplicate timeout option.");
-        }
-        timeout_flag = true;
-        index = TIMEOUT;
-        packet_pos += strlen("timeout");
+bool option_get_flag(int type) {
+    return options[type].flag;
+}
+
+long int option_get_value(int type) {
+    return options[type].value;
+}
+
+// Define functions for setting and getting option names and types.
+char *option_get_name(int type) {
+    switch (type) {
+        case TIMEOUT:
+            return TIMEOUT_NAME;
+        case TSIZE:
+            return TSIZE_NAME;
+        case BLKSIZE:
+            return BLKSIZE_NAME;
+        default:
+            return NULL;
     }
-    else if (strcmp(packet + packet_pos, "tsize") == 0) {
-        if (tsize_flag) {
-            error_exit("Duplicate tsize option.");
-        }
-        tsize_flag = true;
-        index = TSIZE;
-        packet_pos += strlen("tsize");
+}
+
+int option_get_type(char *name) {
+    if (strcmp(name, TIMEOUT_NAME) == 0) {
+        return TIMEOUT;
     }
-    else if (strcmp(packet + packet_pos, "blksize") == 0) {
-        if (blksize_flag) {
-            error_exit("Duplicate blksize option.");
-        }
-        blksize_flag = true;
-        index = BLKSIZE;
-        packet_pos += strlen("blksize");
+    else if (strcmp(name, TSIZE_NAME) == 0) {
+        return TSIZE;
+    }
+    else if (strcmp(name, BLKSIZE_NAME) == 0) {
+        return BLKSIZE;
     }
     else {
-        error_exit("Invalid option.");
+        return -1;
     }
-    packet_pos++;
-    
-    options[index] = strtol(packet + packet_pos, &endptr, 10);
-    if (*endptr != '\0') {
-        error_exit("Invalid option value.");
+}
+
+// Define functions for setting and getting options in packets.
+void options_set(char *packet) {
+    for (int i = 0; i < NUM_OPTIONS; i++) {
+        if (option_get_flag(i) == true) {
+            // Copy option name to packet.
+            strcpy(packet + packet_pos, option_get_name(i));
+            // Increment pointer position in packet.
+            packet_pos += strlen(option_get_name(i));
+            // Copy option value to packet.
+            sprintf(packet + packet_pos, "%ld", option_get_value(i));
+            // Increment pointer position in packet.
+            packet_pos += strlen(packet + packet_pos) + 1;
+        }
     }
-    packet_pos += strlen(packet + packet_pos);
-    packet_pos++;
+}
+
+void options_load(char *packet) {
+    char *endptr, *name;
+    int type;
+    long int value;
+    while (packet[packet_pos] != '\0') {
+        name = packet + packet_pos;
+        type = option_get_type(name);
+        if (type == -1) {
+            error_exit("Invalid option.");
+        }
+        if (option_get_flag(type) == true) {
+            error_exit("Duplicate option.");
+        }
+        packet_pos += strlen(name) + 1;
+        value = strtol(packet + packet_pos, &endptr, 10);
+        if (*endptr != '\0') {
+            error_exit("Invalid option value.");
+        }
+        option_set(type, value);
+        packet_pos += strlen(packet + packet_pos) + 1;
+    }
 }
