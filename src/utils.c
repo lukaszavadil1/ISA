@@ -234,3 +234,42 @@ void options_load(char *packet) {
         packet_pos += strlen(packet + packet_pos) + 1;
     }
 }
+
+void block_number_set(int block_number, char *packet) {
+    // Save block number in network byte order.
+    block_number = htons(block_number);
+    // Copy block number to packet.
+    memcpy(packet + packet_pos, &(block_number), 2);
+    // Increment pointer position in packet.
+    packet_pos += 2;
+}
+
+int block_number_get(char *packet) {
+    int block_number;
+    // Copy block number from packet.
+    memcpy(&block_number, packet + packet_pos, 2);
+    // Convert block number to host byte order.
+    block_number = ntohs(block_number);
+    // Increment pointer position in packet.
+    packet_pos += 2;
+    return block_number;
+}
+
+void data_set(char *data, char *packet) {
+    // Copy data to packet.
+    strcpy(packet + packet_pos, data);
+    // Increment pointer position in packet.
+    packet_pos += strlen(data);
+}
+
+char *data_get(char *packet) {
+    char *data = malloc(MAX_STR_LEN);
+    if (data == NULL) {
+        error_exit("Data malloc failed.");
+    }
+    // Copy data from packet.
+    strcpy(data, packet + packet_pos);
+    // Increment pointer position in packet.
+    packet_pos += strlen(data);
+    return data;
+}

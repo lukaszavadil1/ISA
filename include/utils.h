@@ -205,4 +205,12 @@ void options_load(char *packet);
 */
 void options_set(char *packet);
 
+void block_number_set(int block_number, char *packet);
+
+int block_number_get(char *packet);
+
+void data_set(char *data, char *packet);
+
+char *data_get(char *packet);
+
 #endif // UTILS_H

@@ -78,11 +78,15 @@ int main(int argc, char *argv[]) {
         else if (pid == 0) {
             char file_name[MAX_STR_LEN];
             char mode[MAX_STR_LEN];
-            char *opcode_str;
-            int client_block_num = 0;
-            int server_block_num = 0;
+            int sent_block_num = 0;
+            int received_block_num = 0;
             int opcode = 0;
             packet_pos = 0;
+            char data[MAX_PACKET_SIZE];
+
+            if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+                error_exit("socket creation failed");
+            }
 
             handle_client_request(packet, &opcode, file_name, mode);
             print_client_request(opcode, file_name, mode);
@@ -93,11 +97,10 @@ int main(int argc, char *argv[]) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     // Send OACK packet.
                     opcode_set(OACK, packet);
-                    opcode_str = opcode_to_str(OACK);
                     options_set(packet);
                     printf("#########################################\n");
                     printf("Packet info: Sending packet to client\n\n");
-                    printf("Opcode: %s\n", opcode_str);
+                    printf("Opcode: %s\n", opcode_to_str(OACK));
                     printf("Options:\n");
                     if (options[TIMEOUT].flag) {
                         printf("Timeout: %ld\n", options[TIMEOUT].value);
@@ -113,34 +116,90 @@ int main(int argc, char *argv[]) {
                                 client_address_size) < 0) {
                         error_exit("Sendto failed on server side.");
                     }
+
+                    memset(packet, 0, MAX_PACKET_SIZE);
+                    packet_pos = 0;
+
+                    if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+                                (socklen_t *) &client_address_size) < 0) {
+                        error_exit("Recvfrom failed on server side.");
+                    }
+                    if (opcode_get(packet) != ACK) {
+                        error_exit("Invalid opcode, server expected ACK.");
+                    }
+                    if (block_number_get(packet) != 0) {
+                        error_exit("Invalid block number, server expected 0.");
+                    }
+
+                    printf("#########################################\n");
+                    printf("Received packet from client\n\n");
+                    printf("Opcode: %s\n", opcode_to_str(ACK));
+                    printf("Block number: %d\n", received_block_num);
+                    printf("#########################################\n\n");
+
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
                 }
-                else {
-                    // Send ACK packet.
-                    opcode_set(ACK, packet);
-                    opcode_str = opcode_to_str(ACK);
-                    printf("#########################################\n");
-                    printf("Packet info: Sending packet to client\n\n");
-                    printf("Opcode: %s\n", opcode_str);
-                    printf("#########################################\n\n");
+                while(true) {
+                    opcode_set(DATA, packet);
+                    sent_block_num++;
+                    block_number_set(sent_block_num, packet);
+                    printf("> ");
+                    fgets(data, MAX_PACKET_SIZE, stdin);
+                    data_set(data, packet);
+
                     if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
                                 client_address_size) < 0) {
                         error_exit("Sendto failed on server side.");
                     }
+
+                    printf("#########################################\n");
+                    printf("Sending packet to client\n\n");
+                    printf("Opcode: %s\n", opcode_to_str(DATA));
+                    printf("Block number: %d\n", sent_block_num);
+                    printf("Data: %s\n", data_get(packet));
+                    printf("#########################################\n\n");
+
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
+
+                    if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+                                (socklen_t *) &client_address_size) < 0) {
+                        error_exit("Recvfrom failed on server side.");
+                    }
+
+                    opcode = opcode_get(packet);
+                    if (opcode != ACK) {
+                        error_exit("Invalid opcode, server expected ACK.");
+                    }
+
+                    received_block_num = block_number_get(packet);
+                    if (received_block_num != sent_block_num) {
+                        error_exit("Invalid block number.");
+                    }
+
+                    printf("#########################################\n");
+                    printf("Received packet from client\n\n");
+                    printf("Opcode: %s\n", opcode_to_str(ACK));
+                    printf("Block number: %d\n", received_block_num);
+                    printf("#########################################\n\n");
+
+                    memset(packet, 0, MAX_PACKET_SIZE);
+                    packet_pos = 0;
+
+                    if (strcmp(data, "exit\n") == 0) {
+                        break;
+                    }
                 }
             }
-            else if (opcode == WRQ) {
+            else {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     // Send OACK packet.
                     opcode_set(OACK, packet);
                     options_set(packet);
-                    opcode_str = opcode_to_str(OACK);
                     printf("#########################################\n");
                     printf("Packet info: Sending packet to client\n\n");
-                    printf("Opcode: %s\n", opcode_str);
+                    printf("Opcode: %s\n", opcode_to_str(OACK));
                     printf("Options:\n");
                     if (options[TIMEOUT].flag) {
                         printf("Timeout: %ld\n", options[TIMEOUT].value);
@@ -152,35 +211,78 @@ int main(int argc, char *argv[]) {
                         printf("Blksize: %ld\n", options[BLKSIZE].value);
                     }
                     printf("#########################################\n\n");
-                    if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
-                                client_address_size) < 0) {
-                        error_exit("Sendto failed on server side.");
-                    }
-                    memset(packet, 0, MAX_PACKET_SIZE);
-                    packet_pos = 0;
                 }
                 else {
                     // Send ACK packet.
                     opcode_set(ACK, packet);
-                    opcode_str = opcode_to_str(ACK);
+                    block_number_set(0, packet);
+
                     printf("#########################################\n");
                     printf("Packet info: Sending packet to client\n\n");
-                    printf("Opcode: %s\n", opcode_str);
+                    printf("Opcode: %s\n", opcode_to_str(ACK));
+                    printf("Block number: %d\n", sent_block_num);
                     printf("#########################################\n\n");
+                }
+
+                if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
+                                client_address_size) < 0) {
+                        error_exit("Sendto failed on server side.");
+                    }
+
+                memset(packet, 0, MAX_PACKET_SIZE);
+                packet_pos = 0;
+
+                while (true) {
+                    if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+                                (socklen_t *) &client_address_size) < 0) {
+                        error_exit("Recvfrom failed on server side.");
+                    }
+
+                    opcode = opcode_get(packet);
+                    if (opcode != DATA) {
+                        error_exit("Invalid opcode, server expected DATA.");
+                    }
+
+                    received_block_num = block_number_get(packet);
+                    sent_block_num++;
+                    if (received_block_num != sent_block_num) {
+                        error_exit("Invalid block number.");
+                    }
+
+                    strcpy(data, data_get(packet));
+
+                    printf("#########################################\n");
+                    printf("Received packet from client\n\n");
+                    printf("Opcode: %s\n", opcode_to_str(DATA));
+                    printf("Block number: %d\n", received_block_num);
+                    printf("Data: %s\n", data);
+                    printf("#########################################\n\n");
+
+                    memset(packet, 0, MAX_PACKET_SIZE);
+                    packet_pos = 0;
+
+                    opcode_set(ACK, packet);
+                    block_number_set(sent_block_num, packet);
+
                     if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
                                 client_address_size) < 0) {
                         error_exit("Sendto failed on server side.");
                     }
+
+                    printf("#########################################\n");
+                    printf("Sending packet to client\n\n");
+                    printf("Opcode: %s\n", opcode_to_str(ACK));
+                    printf("Block number: %d\n", sent_block_num);
+                    printf("#########################################\n\n");
+
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
+
+                    if (strcmp(data, "exit\n") == 0) {
+                        break;
+                    }
                 }
             }
-            else {
-                error_exit("Invalid opcode, server expected RRQ or WRQ.");
-            }
-        }
-        else {
-
         }
     }
 }
