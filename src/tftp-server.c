@@ -19,17 +19,15 @@
 *
 */
 int main(int argc, char *argv[]) {
-    // Server address.                           
+    // Server and client address structures.                 
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
-
-    // Packet from client.
-    char packet[MAX_PACKET_SIZE];      
-    memset(&packet, 0, MAX_PACKET_SIZE);
-
-    // Client address and its size.           
     struct sockaddr client_address;                  
     size_t client_address_size = sizeof(client_address);
+
+    // Packet buffer for incoming and outgoing packets.
+    char packet[MAX_PACKET_SIZE];      
+    memset(&packet, 0, MAX_PACKET_SIZE);
     
     // Initialize server arguments structure and its members.
     ServerArgs_t *server_args;
@@ -66,6 +64,9 @@ int main(int argc, char *argv[]) {
         
         signal(SIGINT, sigint_handler);
 
+        memset(packet, 0, MAX_PACKET_SIZE);
+        packet_pos = 0;
+
         if ((recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                       (socklen_t *) &client_address_size)) < 0) {
             error_exit("Recvfrom failed on server side.");
@@ -76,46 +77,39 @@ int main(int argc, char *argv[]) {
             error_exit("Server fork failed.");
         }
         else if (pid == 0) {
+            // Packet data.
+            int opcode = 0;
             char file_name[MAX_STR_LEN];
             char mode[MAX_STR_LEN];
-            int sent_block_num = 0;
-            int received_block_num = 0;
-            int opcode = 0;
-            packet_pos = 0;
             char data[MAX_PACKET_SIZE];
 
-            if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-                error_exit("socket creation failed");
-            }
+            // Block numbers for sent and received packets.
+            int out_block_number = 0, in_block_number = 0;
+
+            // Pointer to the current position in packet.
+            packet_pos = 0;
+
+            sock_fd = create_socket();
 
             handle_client_request(packet, &opcode, file_name, mode);
             print_client_request(opcode, file_name, mode);
 
             memset(packet, 0, MAX_PACKET_SIZE);
             packet_pos = 0;
+
             if (opcode == RRQ) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     // Send OACK packet.
                     opcode_set(OACK, packet);
                     options_set(packet);
-                    printf("#########################################\n");
-                    printf("Packet info: Sending packet to client\n\n");
-                    printf("Opcode: %s\n", opcode_to_str(OACK));
-                    printf("Options:\n");
-                    if (options[TIMEOUT].flag) {
-                        printf("Timeout: %ld\n", options[TIMEOUT].value);
-                    }
-                    if (options[TSIZE].flag) {
-                        printf("Tsize: %ld\n", options[TSIZE].value);
-                    }
-                    if (options[BLKSIZE].flag) {
-                        printf("Blksize: %ld\n", options[BLKSIZE].value);
-                    }
-                    printf("#########################################\n\n");
+
                     if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
                                 client_address_size) < 0) {
                         error_exit("Sendto failed on server side.");
                     }
+                    
+                    printf("Sending packet...\n\n");
+                    print_oack_packet();
 
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
@@ -130,20 +124,16 @@ int main(int argc, char *argv[]) {
                     if (block_number_get(packet) != 0) {
                         error_exit("Invalid block number, server expected 0.");
                     }
-
-                    printf("#########################################\n");
-                    printf("Received packet from client\n\n");
-                    printf("Opcode: %s\n", opcode_to_str(ACK));
-                    printf("Block number: %d\n", received_block_num);
-                    printf("#########################################\n\n");
+                    printf("Received packet...\n\n");
+                    print_ack_packet(in_block_number);
 
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
                 }
                 while(true) {
                     opcode_set(DATA, packet);
-                    sent_block_num++;
-                    block_number_set(sent_block_num, packet);
+                    out_block_number++;
+                    block_number_set(out_block_number, packet);
                     printf("> ");
                     fgets(data, MAX_PACKET_SIZE, stdin);
                     data_set(data, packet);
@@ -153,12 +143,8 @@ int main(int argc, char *argv[]) {
                         error_exit("Sendto failed on server side.");
                     }
 
-                    printf("#########################################\n");
-                    printf("Sending packet to client\n\n");
-                    printf("Opcode: %s\n", opcode_to_str(DATA));
-                    printf("Block number: %d\n", sent_block_num);
-                    printf("Data: %s\n", data_get(packet));
-                    printf("#########################################\n\n");
+                    printf("Sending packet...\n\n");
+                    print_data_packet(out_block_number, data);
 
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
@@ -173,55 +159,28 @@ int main(int argc, char *argv[]) {
                         error_exit("Invalid opcode, server expected ACK.");
                     }
 
-                    received_block_num = block_number_get(packet);
-                    if (received_block_num != sent_block_num) {
+                    in_block_number = block_number_get(packet);
+                    if (in_block_number != out_block_number) {
                         error_exit("Invalid block number.");
                     }
 
-                    printf("#########################################\n");
-                    printf("Received packet from client\n\n");
-                    printf("Opcode: %s\n", opcode_to_str(ACK));
-                    printf("Block number: %d\n", received_block_num);
-                    printf("#########################################\n\n");
+                    printf("Received packet...\n\n");
+                    print_ack_packet(in_block_number);
 
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
-
-                    if (strcmp(data, "exit\n") == 0) {
-                        break;
-                    }
                 }
             }
             else {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
-                    // Send OACK packet.
                     opcode_set(OACK, packet);
                     options_set(packet);
-                    printf("#########################################\n");
-                    printf("Packet info: Sending packet to client\n\n");
-                    printf("Opcode: %s\n", opcode_to_str(OACK));
-                    printf("Options:\n");
-                    if (options[TIMEOUT].flag) {
-                        printf("Timeout: %ld\n", options[TIMEOUT].value);
-                    }
-                    if (options[TSIZE].flag) {
-                        printf("Tsize: %ld\n", options[TSIZE].value);
-                    }
-                    if (options[BLKSIZE].flag) {
-                        printf("Blksize: %ld\n", options[BLKSIZE].value);
-                    }
-                    printf("#########################################\n\n");
+                    print_oack_packet();
                 }
                 else {
-                    // Send ACK packet.
                     opcode_set(ACK, packet);
                     block_number_set(0, packet);
-
-                    printf("#########################################\n");
-                    printf("Packet info: Sending packet to client\n\n");
-                    printf("Opcode: %s\n", opcode_to_str(ACK));
-                    printf("Block number: %d\n", sent_block_num);
-                    printf("#########################################\n\n");
+                    print_ack_packet(out_block_number);
                 }
 
                 if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
@@ -243,44 +202,31 @@ int main(int argc, char *argv[]) {
                         error_exit("Invalid opcode, server expected DATA.");
                     }
 
-                    received_block_num = block_number_get(packet);
-                    sent_block_num++;
-                    if (received_block_num != sent_block_num) {
+                    in_block_number = block_number_get(packet);
+                    out_block_number++;
+                    if (in_block_number != out_block_number) {
                         error_exit("Invalid block number.");
                     }
 
-                    strcpy(data, data_get(packet));
-
-                    printf("#########################################\n");
-                    printf("Received packet from client\n\n");
-                    printf("Opcode: %s\n", opcode_to_str(DATA));
-                    printf("Block number: %d\n", received_block_num);
-                    printf("Data: %s\n", data);
-                    printf("#########################################\n\n");
+                    printf("Received packet...\n\n");
+                    print_data_packet(in_block_number, data_get(packet));
 
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
 
                     opcode_set(ACK, packet);
-                    block_number_set(sent_block_num, packet);
+                    block_number_set(out_block_number, packet);
 
                     if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
                                 client_address_size) < 0) {
                         error_exit("Sendto failed on server side.");
                     }
 
-                    printf("#########################################\n");
-                    printf("Sending packet to client\n\n");
-                    printf("Opcode: %s\n", opcode_to_str(ACK));
-                    printf("Block number: %d\n", sent_block_num);
-                    printf("#########################################\n\n");
+                    printf("Sending packet...\n\n");
+                    print_ack_packet(out_block_number);
 
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
-
-                    if (strcmp(data, "exit\n") == 0) {
-                        break;
-                    }
                 }
             }
         }
@@ -329,39 +275,4 @@ void parse_args(int argc, char *argv[], ServerArgs_t *server_args) {
     else {
         error_exit("Missing directory path.");
     }
-}
-
-void handle_client_request(char *packet, int *opcode, char *file_name, char *mode) {
-    *opcode = opcode_get(packet);
-    if (*opcode != RRQ && *opcode != WRQ) {
-        error_exit("Invalid opcode, server expected RRQ or WRQ.");
-    }
-    strcpy(file_name, file_name_get(packet));
-    strcpy(mode, mode_get(packet));
-    options_load(packet);
-}
-
-void print_client_request(int opcode, char *file_name, char *mode) {
-    char *opcode_str = opcode_to_str(opcode);
-    if (opcode_str == NULL) {
-        error_exit("Opcode to string conversion failed.");
-    }
-    printf("#########################################\n");
-    printf("Client request info:\n\n");
-    printf("Opcode: %s\n", opcode_str);
-    printf("File name: %s\n", file_name);
-    printf("Mode: %s\n", mode);
-    if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
-        printf("Options:\n");
-    }
-    if (options[TIMEOUT].flag) {
-        printf("Timeout: %ld\n", options[TIMEOUT].value);
-    }
-    if (options[TSIZE].flag) {
-        printf("Tsize: %ld\n", options[TSIZE].value);
-    }
-    if (options[BLKSIZE].flag) {
-        printf("Blksize: %ld\n", options[BLKSIZE].value);
-    }
-    printf("#########################################\n\n");
 }

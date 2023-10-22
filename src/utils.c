@@ -10,6 +10,7 @@
 
 int packet_pos = 0;
 
+// Set default values for options.
 Option_t options[NUM_OPTIONS] = {
     [TIMEOUT] = {
         .flag = false,
@@ -220,7 +221,7 @@ void options_load(char *packet) {
         name = packet + packet_pos;
         type = option_get_type(name);
         if (type == -1) {
-            error_exit("Invalid option.");
+            error_exit("Invalid option type.");
         }
         if (option_get_flag(type) == true) {
             error_exit("Duplicate option.");
@@ -272,4 +273,76 @@ char *data_get(char *packet) {
     // Increment pointer position in packet.
     packet_pos += strlen(data);
     return data;
+}
+
+void handle_client_request(char *packet, int *opcode, char *file_name, char *mode) {
+    *opcode = opcode_get(packet);
+    if (*opcode != RRQ && *opcode != WRQ) {
+        error_exit("Invalid opcode, server expected RRQ or WRQ.");
+    }
+    strcpy(file_name, file_name_get(packet));
+    strcpy(mode, mode_get(packet));
+    for (int i = 0; i < MAX_PACKET_SIZE; i++) {
+        printf("%c ", packet[i]);
+    }
+    options_load(packet);
+}
+
+void print_client_request(int opcode, char *file_name, char *mode) {
+    char *opcode_str = opcode_to_str(opcode);
+    if (opcode_str == NULL) {
+        error_exit("Opcode to string conversion failed.");
+    }
+    printf("#########################################\n");
+    printf("Client request info:\n\n");
+    printf("Opcode: %s\n", opcode_str);
+    printf("File name: %s\n", file_name);
+    printf("Mode: %s\n", mode);
+    if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
+        printf("Options:\n");
+    }
+    if (options[TIMEOUT].flag) {
+        printf("Timeout: %ld\n", options[TIMEOUT].value);
+    }
+    if (options[TSIZE].flag) {
+        printf("Tsize: %ld\n", options[TSIZE].value);
+    }
+    if (options[BLKSIZE].flag) {
+        printf("Blksize: %ld\n", options[BLKSIZE].value);
+    }
+    printf("#########################################\n\n");
+}
+
+void print_oack_packet() {
+    printf("#########################################\n");
+    printf("Packet info\n\n");
+    printf("Opcode: %s\n", opcode_to_str(OACK));
+    printf("Options:\n");
+    if (options[TIMEOUT].flag) {
+        printf("Timeout: %ld\n", options[TIMEOUT].value);
+    }
+    if (options[TSIZE].flag) {
+        printf("Tsize: %ld\n", options[TSIZE].value);
+    }
+    if (options[BLKSIZE].flag) {
+        printf("Blksize: %ld\n", options[BLKSIZE].value);
+    }
+    printf("#########################################\n\n");
+}
+
+void print_ack_packet(int block_number) {
+    printf("#########################################\n");
+    printf("Packet info\n\n");
+    printf("Opcode: %s\n", opcode_to_str(ACK));
+    printf("Block number: %d\n", block_number);
+    printf("#########################################\n\n");
+}
+
+void print_data_packet(int block_number, char *data) {
+    printf("#########################################\n");
+    printf("Packet info\n\n");
+    printf("Opcode: %s\n", opcode_to_str(DATA));
+    printf("Block number: %d\n", block_number);
+    printf("Data: %s\n", data);
+    printf("#########################################\n\n");
 }

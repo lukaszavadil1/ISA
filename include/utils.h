@@ -46,12 +46,13 @@
 
 extern int packet_pos;
 
-// Struct for options.
+// Struct for storing options.
 typedef struct Option {
     bool flag;
     long int value;
 } Option_t;
 
+// Array of options.
 extern Option_t options[NUM_OPTIONS];
 
 /**
@@ -212,5 +213,15 @@ int block_number_get(char *packet);
 void data_set(char *data, char *packet);
 
 char *data_get(char *packet);
+
+void handle_client_request(char *packet, int *opcode, char *file_name, char *mode);
+
+void print_client_request(int opcode, char *file_name, char *mode);
+
+void print_oack_packet();
+
+void print_ack_packet(int block_number);
+
+void print_data_packet(int block_number, char *data);
 
 #endif // UTILS_H
