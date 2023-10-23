@@ -94,6 +94,11 @@ int main(int argc, char *argv[]) {
             handle_client_request(packet, &opcode, file_name, mode);
             print_client_request(opcode, file_name, mode);
 
+            FILE *file = fopen(file_name, "w");
+            if (file == NULL) {
+                error_exit("Failed to open file.");
+            }
+
             memset(packet, 0, MAX_PACKET_SIZE);
             packet_pos = 0;
 
@@ -135,7 +140,7 @@ int main(int argc, char *argv[]) {
                     out_block_number++;
                     block_number_set(out_block_number, packet);
                     printf("> ");
-                    fgets(data, MAX_PACKET_SIZE, stdin);
+                    fgets(data, MAX_PACKET_SIZE, file);
                     data_set(data, packet);
 
                     if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
@@ -169,6 +174,10 @@ int main(int argc, char *argv[]) {
 
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
+
+                    if (strlen(data) < MAX_PACKET_SIZE - 4) {
+                        break;
+                    }
                 }
             }
             else {
@@ -208,8 +217,11 @@ int main(int argc, char *argv[]) {
                         error_exit("Invalid block number.");
                     }
 
+                    strcpy(data, data_get(packet));
+                    fputs(data, file);
+
                     printf("Received packet...\n\n");
-                    print_data_packet(in_block_number, data_get(packet));
+                    print_data_packet(in_block_number, data);
 
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
@@ -227,6 +239,11 @@ int main(int argc, char *argv[]) {
 
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
+
+                    if (strlen(data) < MAX_PACKET_SIZE - 4) {
+                        fclose(file);
+                        break;
+                    }
                 }
             }
         }

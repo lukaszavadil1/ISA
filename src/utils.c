@@ -290,9 +290,7 @@ void handle_client_request(char *packet, int *opcode, char *file_name, char *mod
 
 void print_client_request(int opcode, char *file_name, char *mode) {
     char *opcode_str = opcode_to_str(opcode);
-    if (opcode_str == NULL) {
-        error_exit("Opcode to string conversion failed.");
-    }
+    
     printf("#########################################\n");
     printf("Client request info:\n\n");
     printf("Opcode: %s\n", opcode_str);

@@ -38,9 +38,20 @@ int main(int argc, char *argv[]) {
     int out_block_number = 0;
     int in_block_number = 0;
     char data[MAX_PACKET_SIZE];
+    FILE *file;
 
     // Parse command line arguments.
     parse_args(argc, argv, client_args, &opcode);
+
+    if (opcode == RRQ) {
+        file = fopen(client_args->dest_file_path, "w");
+        if (file == NULL) {
+            error_exit("Failed to open file.");
+        }
+    }
+    else {
+        file = stdin;
+    }
 
     // Packet from client.
     char packet[MAX_PACKET_SIZE];
@@ -61,7 +72,12 @@ int main(int argc, char *argv[]) {
 
     // Filling packet with opcode, filename and mode.
     opcode_set(opcode, packet);
-    file_name_set(opcode == WRQ ? client_args->dest_file_path : client_args->file_path, packet);
+    if (opcode == WRQ) {
+        file_name_set(client_args->dest_file_path, packet);
+    }
+    else {
+        file_name_set(client_args->file_path, packet);
+    }
     empty_byte_insert(packet);
     mode_set(1, packet); // Set octet mode.
     empty_byte_insert(packet);
@@ -100,8 +116,12 @@ int main(int argc, char *argv[]) {
             }
             out_block_number++;
 
+            strcpy(data, data_get(packet));
+
+            fputs(data, file);
+
             printf("Received packet...\n\n");
-            print_data_packet(in_block_number, data_get(packet));
+            print_data_packet(in_block_number, data);
 
             memset(&packet, 0, MAX_PACKET_SIZE);
             packet_pos = 0;
@@ -114,13 +134,14 @@ int main(int argc, char *argv[]) {
                 error_exit("Sendto failed on client side.");
             }
 
-            memset(&packet, 0, MAX_PACKET_SIZE);
-            packet_pos = 0;
-
             printf("Sent packet...\n\n");
             print_ack_packet(out_block_number);
 
-            if (strcmp(data, "exit\n") == 0) {
+            memset(&packet, 0, MAX_PACKET_SIZE);
+            packet_pos = 0;
+
+            if (strlen(data) < MAX_PACKET_SIZE - 4) {
+                fclose(file);
                 break;
             }
         }
@@ -192,7 +213,7 @@ int main(int argc, char *argv[]) {
             memset(&packet, 0, MAX_PACKET_SIZE);
             packet_pos = 0;
 
-            if (strcmp(data, "exit\n") == 0) {
+            if (strlen(data) < MAX_PACKET_SIZE - 4) {
                 break;
             }
         }

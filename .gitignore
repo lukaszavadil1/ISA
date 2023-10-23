@@ -31,6 +31,8 @@ obj/*
 
 # Executables
 bin/*
+root_dir/*
+client_dir/*
 *.exe
 *.out
 *.app
