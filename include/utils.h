@@ -20,10 +20,13 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <signal.h>
+#include <dirent.h>
 
 // Maximal length of string.
-#define MAX_STR_LEN 512
-#define MAX_PACKET_SIZE 1024
+#define MAX_STR_LEN 256
+#define DEFAULT_DATA_SIZE 512
+#define MAX_PACKET_SIZE 516
+#define DEFAULT_PORT_NUM 69
 
 // Opcode values based on TFTP RFC 1350.
 #define RRQ 1
@@ -41,8 +44,15 @@
 #define BLKSIZE_NAME "blksize"
 #define NUM_OPTIONS 3
 
-// Default port number
-#define DEFAULT_PORT_NUM 69
+// Error codes.
+#define ERR_NOT_DEFINED 0
+#define ERR_FILE_NOT_FOUND 1
+#define ERR_ACCESS_VIOLATION 2
+#define ERR_DISK_FULL 3
+#define ERR_ILLEGAL_OPERATION 4
+#define ERR_UNKNOWN_TRANSFER_ID 5
+#define ERR_FILE_ALREADY_EXISTS 6
+#define ERR_NO_SUCH_USER 7
 
 extern int packet_pos;
 

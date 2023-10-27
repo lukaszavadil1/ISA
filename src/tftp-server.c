@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
             int opcode = 0;
             char file_name[MAX_STR_LEN];
             char mode[MAX_STR_LEN];
-            char data[MAX_PACKET_SIZE];
+            char data[DEFAULT_DATA_SIZE];
 
             // Block numbers for sent and received packets.
             int out_block_number = 0, in_block_number = 0;
@@ -90,14 +90,15 @@ int main(int argc, char *argv[]) {
             packet_pos = 0;
 
             sock_fd = create_socket();
+            server_addr.sin_port = htons(0);
 
             handle_client_request(packet, &opcode, file_name, mode);
             print_client_request(opcode, file_name, mode);
 
-            FILE *file = fopen(file_name, "w");
+            FILE *file = fopen(file_name, "r+");
             if (file == NULL) {
                 error_exit("Failed to open file.");
-            }
+            }            
 
             memset(packet, 0, MAX_PACKET_SIZE);
             packet_pos = 0;
@@ -139,8 +140,9 @@ int main(int argc, char *argv[]) {
                     opcode_set(DATA, packet);
                     out_block_number++;
                     block_number_set(out_block_number, packet);
-                    printf("> ");
-                    fgets(data, MAX_PACKET_SIZE, file);
+                    if (fgets(data, DEFAULT_DATA_SIZE, file) == NULL) {
+                        error_exit("Failed to read from file.");
+                    }
                     data_set(data, packet);
 
                     if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
@@ -271,6 +273,15 @@ void parse_args(int argc, char *argv[], ServerArgs_t *server_args) {
     if (argc > 4 || argc < 2) { 
         error_exit("Invalid number of arguments.");
     }
+    if (argc == 2) {
+        strcpy(server_args->dir_path, argv[1]);
+        DIR *dir = opendir(server_args->dir_path);
+        if (dir == NULL) {
+            error_exit("Failed to open directory.");
+        }
+        closedir(dir);
+        return;
+    }
     int opt;
     bool p_flag = false;
     while ((opt = getopt(argc, argv, "p:")) != -1) {
@@ -288,6 +299,11 @@ void parse_args(int argc, char *argv[], ServerArgs_t *server_args) {
     }
     if (optind < argc) {
         strcpy(server_args->dir_path, argv[optind]);
+        DIR *dir = opendir(server_args->dir_path);
+        if (dir == NULL) {
+            error_exit("Failed to open directory.");
+        }
+        closedir(dir);
     } 
     else {
         error_exit("Missing directory path.");

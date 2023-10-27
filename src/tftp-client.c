@@ -173,7 +173,9 @@ int main(int argc, char *argv[]) {
             block_number_set(out_block_number, packet);
 
             printf("> ");
-            fgets(data, MAX_PACKET_SIZE, stdin);
+            if (fgets(data, MAX_PACKET_SIZE, stdin) == NULL) {
+                error_exit("Failed to read from stdin.");
+            }
 
             data_set(data, packet);
 
