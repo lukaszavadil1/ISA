@@ -322,6 +322,35 @@ void handle_data(char *packet, int expected_block_number) {
     }
 }
 
+void send_data_packet(int socket, struct sockaddr_in dest_addr, int block_number, char *data) {
+    char packet[MAX_PACKET_SIZE];
+    memset(&packet, 0, MAX_PACKET_SIZE);
+    packet_pos = 0;
+
+    opcode_set(DATA, packet);
+    block_number_set(block_number, packet);
+    data_set(data, packet);
+
+    if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
+        error_exit("Sendto failed.");
+    }
+    packet_pos = 0;
+}
+
+void send_ack_packet(int socket, struct sockaddr_in dest_addr, int block_number) {
+    char packet[MAX_PACKET_SIZE];
+    memset(&packet, 0, MAX_PACKET_SIZE);
+    packet_pos = 0;
+
+    opcode_set(ACK, packet);
+    block_number_set(block_number, packet);
+
+    if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
+        error_exit("Sendto failed.");
+    }
+    packet_pos = 0;
+}
+
 void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
     struct sockaddr_in dest_addr;
     socklen_t dest_addr_size = sizeof(dest_addr);

@@ -100,9 +100,22 @@ int main(int argc, char *argv[]) {
             strcpy(file_name, file_name_get(packet));
             strcpy(mode, mode_get(packet));
 
-            file = fopen(file_name, "r+");
+            if (opcode == WRQ) {
+                if (access(file_name, F_OK) == 0) {
+                    send_error_packet(sock_fd, client_address, 6, "File already exists.");
+                    exit(EXIT_FAILURE);
+                }
+                file = fopen(file_name, "w");
+            }
+            else if (opcode == RRQ) {
+                file = fopen(file_name, "r");
+            }
+            else {
+                send_error_packet(sock_fd, client_address, 4, "Illegal TFTP operation.");
+                exit(EXIT_FAILURE);
+            }
             if (file == NULL) {
-                send_error_packet(sock_fd, client_address, 1, "File not found.");
+                send_error_packet(sock_fd, client_address, 3, "Disk full or allocation exceeded.");
                 exit(EXIT_FAILURE);
             }           
 
@@ -135,8 +148,7 @@ int main(int argc, char *argv[]) {
                 }
                 while(true) {
                     opcode_set(DATA, packet);
-                    out_block_number++;
-                    block_number_set(out_block_number, packet);
+                    block_number_set(++out_block_number, packet);
                     while(fgets(line, DEFAULT_DATA_SIZE, file) != NULL) {
                         strcat(data, line);
                     }
@@ -166,7 +178,7 @@ int main(int argc, char *argv[]) {
                     }
                 }
             }
-            else {
+            else if (opcode == WRQ) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     opcode_set(OACK, packet);
                     options_set(packet);
@@ -218,6 +230,10 @@ int main(int argc, char *argv[]) {
                         break;
                     }
                 }
+            }
+            else {
+                send_error_packet(sock_fd, client_address, 4, "Illegal TFTP operation.");
+                exit(EXIT_FAILURE);
             }
         }
     }

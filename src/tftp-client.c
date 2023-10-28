@@ -37,7 +37,6 @@ int main(int argc, char *argv[]) {
     packet_pos = 0;
     int out_block_number = 0;
     char data[DEFAULT_DATA_SIZE] = {0};
-    char line[DEFAULT_DATA_SIZE] = {0};
 
     // Parse command line arguments.
     parse_args(argc, argv, client_args, &opcode);
@@ -96,8 +95,15 @@ int main(int argc, char *argv[]) {
                 error_exit("Recvfrom failed on client side.");
             }
 
-            handle_data(packet, out_block_number + 1);
-            out_block_number++;
+            opcode = opcode_get(packet);
+            packet_pos = 0;
+            if (opcode == ERROR) {
+                display_message(sock_fd, server_address, packet);
+                fclose(file);
+                exit(EXIT_FAILURE);
+            }
+            packet_pos = 0;
+            handle_data(packet, ++out_block_number);
 
             strcpy(data, data_get(packet));
             fputs(data, file);

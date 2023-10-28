@@ -234,6 +234,8 @@ char *error_msg_get(char *packet);
 
 void send_error_packet(int socket, struct sockaddr_in dest_addr, int error_code, char *error_msg);
 
+void send_data_packet(int socket, struct sockaddr_in dest_addr, int block_number, char *data);
+
 void handle_client_request(char *packet);
 
 void handle_ack(char *packet, int expected_block_number);
