@@ -21,6 +21,8 @@ typedef struct ClientArgs {
     char *dest_file_path;
 } ClientArgs_t;
 
+FILE *file;
+
 /**
 * @brief Initialize ClientArgs_t struct.
 *

@@ -275,72 +275,94 @@ char *data_get(char *packet) {
     return data;
 }
 
-void handle_client_request(char *packet, int *opcode, char *file_name, char *mode) {
-    *opcode = opcode_get(packet);
-    if (*opcode != RRQ && *opcode != WRQ) {
+void handle_client_request(char *packet) {
+    int opcode;
+    char *file_name, *mode;
+
+    opcode = opcode_get(packet);
+    if (opcode != RRQ && opcode != WRQ) {
         error_exit("Invalid opcode, server expected RRQ or WRQ.");
     }
-    strcpy(file_name, file_name_get(packet));
-    strcpy(mode, mode_get(packet));
-    for (int i = 0; i < MAX_PACKET_SIZE; i++) {
-        printf("%c ", packet[i]);
+    file_name = file_name_get(packet);
+    if (strlen(file_name) == 0) {
+        error_exit("Invalid file name.");
+    }
+    mode = mode_get(packet);
+    if (strcmp(mode, "octet") != 0 && strcmp(mode, "netascii") != 0) {
+        error_exit("Invalid mode.");
     }
     options_load(packet);
+    packet_pos = 0;
 }
 
-void print_client_request(int opcode, char *file_name, char *mode) {
-    char *opcode_str = opcode_to_str(opcode);
-    
-    printf("#########################################\n");
-    printf("Client request info:\n\n");
-    printf("Opcode: %s\n", opcode_str);
-    printf("File name: %s\n", file_name);
-    printf("Mode: %s\n", mode);
-    if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
-        printf("Options:\n");
+void handle_ack(char *packet, int expected_block_number) {
+    int opcode, block_number;
+
+    opcode = opcode_get(packet);
+    if (opcode != ACK) {
+        error_exit("Invalid opcode, server expected ACK.");
     }
-    if (options[TIMEOUT].flag) {
-        printf("Timeout: %ld\n", options[TIMEOUT].value);
+    block_number = block_number_get(packet);
+    if (block_number != expected_block_number) {
+        error_exit("Invalid ack block number.");
     }
-    if (options[TSIZE].flag) {
-        printf("Tsize: %ld\n", options[TSIZE].value);
-    }
-    if (options[BLKSIZE].flag) {
-        printf("Blksize: %ld\n", options[BLKSIZE].value);
-    }
-    printf("#########################################\n\n");
+    packet_pos = 0;
 }
 
-void print_oack_packet() {
-    printf("#########################################\n");
-    printf("Packet info\n\n");
-    printf("Opcode: %s\n", opcode_to_str(OACK));
-    printf("Options:\n");
-    if (options[TIMEOUT].flag) {
-        printf("Timeout: %ld\n", options[TIMEOUT].value);
+void handle_data(char *packet, int expected_block_number) {
+    int opcode, block_number;
+
+    opcode = opcode_get(packet);
+    if (opcode != DATA) {
+        error_exit("Invalid opcode, server expected DATA.");
     }
-    if (options[TSIZE].flag) {
-        printf("Tsize: %ld\n", options[TSIZE].value);
+    block_number = block_number_get(packet);
+    if (block_number != expected_block_number) {
+        error_exit("Invalid data block number.");
     }
-    if (options[BLKSIZE].flag) {
-        printf("Blksize: %ld\n", options[BLKSIZE].value);
-    }
-    printf("#########################################\n\n");
 }
 
-void print_ack_packet(int block_number) {
-    printf("#########################################\n");
-    printf("Packet info\n\n");
-    printf("Opcode: %s\n", opcode_to_str(ACK));
-    printf("Block number: %d\n", block_number);
-    printf("#########################################\n\n");
-}
+void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
+    struct sockaddr_in dest_addr;
+    socklen_t dest_addr_size = sizeof(dest_addr);
+    memset(&dest_addr, 0, dest_addr_size);
 
-void print_data_packet(int block_number, char *data) {
-    printf("#########################################\n");
-    printf("Packet info\n\n");
-    printf("Opcode: %s\n", opcode_to_str(DATA));
-    printf("Block number: %d\n", block_number);
-    printf("Data: %s\n", data);
-    printf("#########################################\n\n");
+    if (getsockname(socket, (struct sockaddr *)&dest_addr, &dest_addr_size) < 0) {
+        error_exit("Getsockname failed.");
+    }
+    int dest_port = ntohs(dest_addr.sin_port);
+    int src_port = ntohs(source_addr.sin_port);
+    char *src_ip = inet_ntoa(source_addr.sin_addr);
+    int opcode = opcode_get(packet);
+    int block_number;
+    char *mode;
+    char *file_name;
+    switch (opcode) {
+        case RRQ:
+            file_name = file_name_get(packet);
+            mode = mode_get(packet);
+            fprintf(stderr, "RRQ: %s:%d \"%s\" %s\n", src_ip, src_port, file_name, mode);
+            break;
+        case WRQ:
+            file_name = file_name_get(packet);
+            mode = mode_get(packet);
+            fprintf(stderr, "WRQ: %s:%d \"%s\" %s\n", src_ip, src_port, file_name, mode);
+            break;
+        case DATA:
+            block_number = block_number_get(packet);
+            fprintf(stderr, "DATA: %s:%d:%d %d\n", src_ip, src_port, dest_port, block_number);
+            break;
+        case ACK:
+            block_number = block_number_get(packet);
+            fprintf(stderr, "ACK: %s:%d %d\n", src_ip, src_port, block_number);
+            break;
+        // case ERROR:
+        //     int error_code = error_code_get(packet);
+        //     char *error_msg = error_message_get(packet);
+        //     fprintf(stderr, "ERROR: %s:%d %d %s\n", src_ip, src_port, error_code, error_msg);
+        //     break;
+        default:
+            error_exit("Invalid opcode.");
+    }
+    packet_pos = 0;
 }

@@ -22,7 +22,7 @@ int main(int argc, char *argv[]) {
     // Server and client address structures.                 
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
-    struct sockaddr client_address;                  
+    struct sockaddr_in client_address;                  
     size_t client_address_size = sizeof(client_address);
 
     // Packet buffer for incoming and outgoing packets.
@@ -78,13 +78,14 @@ int main(int argc, char *argv[]) {
         }
         else if (pid == 0) {
             // Packet data.
-            int opcode = 0;
-            char file_name[MAX_STR_LEN];
-            char mode[MAX_STR_LEN];
-            char data[DEFAULT_DATA_SIZE];
+            int opcode;
+            char file_name[MAX_STR_LEN] = {0};
+            char data[DEFAULT_DATA_SIZE] = {0};
+            char mode[MAX_STR_LEN] = {0};
+            char line[DEFAULT_DATA_SIZE] = {0};
 
             // Block numbers for sent and received packets.
-            int out_block_number = 0, in_block_number = 0;
+            int out_block_number = 0;
 
             // Pointer to the current position in packet.
             packet_pos = 0;
@@ -92,13 +93,17 @@ int main(int argc, char *argv[]) {
             sock_fd = create_socket();
             server_addr.sin_port = htons(0);
 
-            handle_client_request(packet, &opcode, file_name, mode);
-            print_client_request(opcode, file_name, mode);
+            handle_client_request(packet);
+            display_message(sock_fd, client_address, packet); 
 
-            FILE *file = fopen(file_name, "r+");
+            opcode = opcode_get(packet);
+            strcpy(file_name, file_name_get(packet));
+            strcpy(mode, mode_get(packet));
+
+            file = fopen(file_name, "r+");
             if (file == NULL) {
                 error_exit("Failed to open file.");
-            }            
+            }           
 
             memset(packet, 0, MAX_PACKET_SIZE);
             packet_pos = 0;
@@ -113,9 +118,6 @@ int main(int argc, char *argv[]) {
                                 client_address_size) < 0) {
                         error_exit("Sendto failed on server side.");
                     }
-                    
-                    printf("Sending packet...\n\n");
-                    print_oack_packet();
 
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
@@ -124,24 +126,18 @@ int main(int argc, char *argv[]) {
                                 (socklen_t *) &client_address_size) < 0) {
                         error_exit("Recvfrom failed on server side.");
                     }
-                    if (opcode_get(packet) != ACK) {
-                        error_exit("Invalid opcode, server expected ACK.");
-                    }
-                    if (block_number_get(packet) != 0) {
-                        error_exit("Invalid block number, server expected 0.");
-                    }
-                    printf("Received packet...\n\n");
-                    print_ack_packet(in_block_number);
+                    
+                    handle_ack(packet, 0);
+                    display_message(sock_fd, client_address, packet);
 
                     memset(packet, 0, MAX_PACKET_SIZE);
-                    packet_pos = 0;
                 }
                 while(true) {
                     opcode_set(DATA, packet);
                     out_block_number++;
                     block_number_set(out_block_number, packet);
-                    if (fgets(data, DEFAULT_DATA_SIZE, file) == NULL) {
-                        error_exit("Failed to read from file.");
+                    while(fgets(line, DEFAULT_DATA_SIZE, file) != NULL) {
+                        strcat(data, line);
                     }
                     data_set(data, packet);
 
@@ -150,9 +146,6 @@ int main(int argc, char *argv[]) {
                         error_exit("Sendto failed on server side.");
                     }
 
-                    printf("Sending packet...\n\n");
-                    print_data_packet(out_block_number, data);
-
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
 
@@ -161,23 +154,13 @@ int main(int argc, char *argv[]) {
                         error_exit("Recvfrom failed on server side.");
                     }
 
-                    opcode = opcode_get(packet);
-                    if (opcode != ACK) {
-                        error_exit("Invalid opcode, server expected ACK.");
-                    }
-
-                    in_block_number = block_number_get(packet);
-                    if (in_block_number != out_block_number) {
-                        error_exit("Invalid block number.");
-                    }
-
-                    printf("Received packet...\n\n");
-                    print_ack_packet(in_block_number);
+                    handle_ack(packet, out_block_number);
+                    display_message(sock_fd, client_address, packet);
 
                     memset(packet, 0, MAX_PACKET_SIZE);
-                    packet_pos = 0;
 
-                    if (strlen(data) < MAX_PACKET_SIZE - 4) {
+                    if (strlen(data) < DEFAULT_DATA_SIZE) {
+                        fclose(file);
                         break;
                     }
                 }
@@ -186,12 +169,10 @@ int main(int argc, char *argv[]) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     opcode_set(OACK, packet);
                     options_set(packet);
-                    print_oack_packet();
                 }
                 else {
                     opcode_set(ACK, packet);
                     block_number_set(0, packet);
-                    print_ack_packet(out_block_number);
                 }
 
                 if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
@@ -208,25 +189,17 @@ int main(int argc, char *argv[]) {
                         error_exit("Recvfrom failed on server side.");
                     }
 
-                    opcode = opcode_get(packet);
-                    if (opcode != DATA) {
-                        error_exit("Invalid opcode, server expected DATA.");
-                    }
-
-                    in_block_number = block_number_get(packet);
                     out_block_number++;
-                    if (in_block_number != out_block_number) {
-                        error_exit("Invalid block number.");
-                    }
+                    handle_data(packet, out_block_number);
 
+                    // Stdin -> server -> file
                     strcpy(data, data_get(packet));
                     fputs(data, file);
+                    packet_pos = 0;
 
-                    printf("Received packet...\n\n");
-                    print_data_packet(in_block_number, data);
+                    display_message(sock_fd, client_address, packet);
 
                     memset(packet, 0, MAX_PACKET_SIZE);
-                    packet_pos = 0;
 
                     opcode_set(ACK, packet);
                     block_number_set(out_block_number, packet);
@@ -236,13 +209,10 @@ int main(int argc, char *argv[]) {
                         error_exit("Sendto failed on server side.");
                     }
 
-                    printf("Sending packet...\n\n");
-                    print_ack_packet(out_block_number);
-
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
 
-                    if (strlen(data) < MAX_PACKET_SIZE - 4) {
+                    if (strlen(data) < DEFAULT_DATA_SIZE) {
                         fclose(file);
                         break;
                     }

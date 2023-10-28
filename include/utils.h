@@ -224,14 +224,20 @@ void data_set(char *data, char *packet);
 
 char *data_get(char *packet);
 
-void handle_client_request(char *packet, int *opcode, char *file_name, char *mode);
+void handle_client_request(char *packet);
 
-void print_client_request(int opcode, char *file_name, char *mode);
+void handle_ack(char *packet, int expected_block_number);
+
+void handle_data(char *packet, int expected_block_number);
 
 void print_oack_packet();
 
 void print_ack_packet(int block_number);
 
 void print_data_packet(int block_number, char *data);
+
+void print_error_packet(int error_code, char *error_msg);
+
+void display_message(int socket, struct sockaddr_in source_addr, char *packet);
 
 #endif // UTILS_H
