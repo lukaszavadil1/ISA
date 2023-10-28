@@ -128,7 +128,13 @@ int main(int argc, char *argv[]) {
         if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
             error_exit("Recvfrom failed on client side.");
         }
-
+        opcode = opcode_get(packet);
+        packet_pos = 0;
+        if(opcode == ERROR) {
+            display_message(sock_fd, server_address, packet);
+            fclose(file);
+            exit(EXIT_FAILURE);
+        }
         handle_ack(packet, 0);
         display_message(sock_fd, server_address, packet);
 

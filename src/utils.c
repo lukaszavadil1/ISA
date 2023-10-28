@@ -337,6 +337,8 @@ void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
     int block_number;
     char *mode;
     char *file_name;
+    int error_code;
+    char *error_msg;
     switch (opcode) {
         case RRQ:
             file_name = file_name_get(packet);
@@ -356,13 +358,67 @@ void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
             block_number = block_number_get(packet);
             fprintf(stderr, "ACK: %s:%d %d\n", src_ip, src_port, block_number);
             break;
-        // case ERROR:
-        //     int error_code = error_code_get(packet);
-        //     char *error_msg = error_message_get(packet);
-        //     fprintf(stderr, "ERROR: %s:%d %d %s\n", src_ip, src_port, error_code, error_msg);
-        //     break;
+        case ERROR:
+            error_code = error_code_get(packet);
+            error_msg = error_msg_get(packet);
+            fprintf(stderr, "ERROR: %s:%d:%d %d \"%s\"\n", src_ip, src_port, dest_port, error_code, error_msg);
+            break;
         default:
             error_exit("Invalid opcode.");
     }
     packet_pos = 0;
+}
+
+void error_code_set(int error_code, char *packet) {
+    // Save error code in network byte order.
+    error_code = htons(error_code);
+    // Copy error code to packet.
+    memcpy(packet + packet_pos, &(error_code), 2);
+    // Increment pointer position in packet.
+    packet_pos += 2;
+}
+
+int error_code_get(char *packet) {
+    int error_code;
+    // Copy error code from packet.
+    memcpy(&error_code, packet + packet_pos, 2);
+    // Convert error code to host byte order.
+    error_code = ntohs(error_code);
+    // Increment pointer position in packet.
+    packet_pos += 2;
+    return error_code;
+}
+
+void error_msg_set(char *error_message, char *packet) {
+    // Copy error message to packet.
+    strcpy(packet + packet_pos, error_message);
+    // Increment pointer position in packet.
+    packet_pos += strlen(error_message);
+}
+
+char *error_msg_get(char *packet) {
+    char *error_message = malloc(MAX_STR_LEN);
+    if (error_message == NULL) {
+        error_exit("Error message malloc failed.");
+    }
+    // Copy error message from packet.
+    strcpy(error_message, packet + packet_pos);
+    // Increment pointer position in packet.
+    packet_pos += strlen(error_message);
+    return error_message;
+}
+
+void send_error_packet(int socket, struct sockaddr_in dest_addr, int error_code, char *error_message) {
+    char packet[MAX_PACKET_SIZE];
+    memset(&packet, 0, MAX_PACKET_SIZE);
+    packet_pos = 0;
+
+    opcode_set(ERROR, packet);
+    error_code_set(error_code, packet);
+    error_msg_set(error_message, packet);
+    empty_byte_insert(packet);
+
+    if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
+        error_exit("Sendto failed.");
+    }
 }

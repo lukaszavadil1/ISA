@@ -102,7 +102,8 @@ int main(int argc, char *argv[]) {
 
             file = fopen(file_name, "r+");
             if (file == NULL) {
-                error_exit("Failed to open file.");
+                send_error_packet(sock_fd, client_address, 1, "File not found.");
+                exit(EXIT_FAILURE);
             }           
 
             memset(packet, 0, MAX_PACKET_SIZE);

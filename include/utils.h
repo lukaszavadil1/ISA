@@ -224,6 +224,16 @@ void data_set(char *data, char *packet);
 
 char *data_get(char *packet);
 
+void error_code_set(int error_code, char *packet);
+
+int error_code_get(char *packet);
+
+void error_msg_set(char *error_msg, char *packet);
+
+char *error_msg_get(char *packet);
+
+void send_error_packet(int socket, struct sockaddr_in dest_addr, int error_code, char *error_msg);
+
 void handle_client_request(char *packet);
 
 void handle_ack(char *packet, int expected_block_number);
