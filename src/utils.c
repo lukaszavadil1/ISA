@@ -392,6 +392,10 @@ void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
             error_msg = error_msg_get(packet);
             fprintf(stderr, "ERROR: %s:%d:%d %d \"%s\"\n", src_ip, src_port, dest_port, error_code, error_msg);
             break;
+        case OACK:
+            // TODO - add options
+            fprintf(stderr, "OACK: %s:%d\n", src_ip, src_port);
+            break;
         default:
             error_exit("Invalid opcode.");
     }

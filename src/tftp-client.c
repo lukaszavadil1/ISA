@@ -147,21 +147,9 @@ int main(int argc, char *argv[]) {
         memset(&packet, 0, MAX_PACKET_SIZE);
 
         while(true) {
-            opcode_set(DATA, packet);
-            out_block_number++;
-            block_number_set(out_block_number, packet);
-
             printf("> ");
             fgets(data, DEFAULT_DATA_SIZE, stdin);
-            data_set(data, packet);
-
-            if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM,
-                       (const struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
-                error_exit("Sendto failed on client side.");
-            }
-
-            memset(&packet, 0, MAX_PACKET_SIZE);
-            packet_pos = 0;
+            send_data_packet(sock_fd, server_address, ++out_block_number, data);
 
             if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
                 error_exit("Recvfrom failed on client side.");

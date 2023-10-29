@@ -115,7 +115,7 @@ int main(int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
             }
             if (file == NULL) {
-                send_error_packet(sock_fd, client_address, 3, "Disk full or allocation exceeded.");
+                send_error_packet(sock_fd, client_address, 1, "File not found.");
                 exit(EXIT_FAILURE);
             }           
 
@@ -147,20 +147,10 @@ int main(int argc, char *argv[]) {
                     memset(packet, 0, MAX_PACKET_SIZE);
                 }
                 while(true) {
-                    opcode_set(DATA, packet);
-                    block_number_set(++out_block_number, packet);
                     while(fgets(line, DEFAULT_DATA_SIZE, file) != NULL) {
                         strcat(data, line);
                     }
-                    data_set(data, packet);
-
-                    if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
-                                client_address_size) < 0) {
-                        error_exit("Sendto failed on server side.");
-                    }
-
-                    memset(packet, 0, MAX_PACKET_SIZE);
-                    packet_pos = 0;
+                    send_data_packet(sock_fd, client_address, ++out_block_number, data);
 
                     if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size) < 0) {
