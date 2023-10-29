@@ -86,6 +86,7 @@ int main(int argc, char *argv[]) {
 
             // Block numbers for sent and received packets.
             int out_block_number = 0;
+            int input_len = 0;
 
             // Pointer to the current position in packet.
             packet_pos = 0;
@@ -147,11 +148,11 @@ int main(int argc, char *argv[]) {
                     memset(packet, 0, MAX_PACKET_SIZE);
                 }
                 while(true) {
-                    while(fgets(line, DEFAULT_DATA_SIZE, file) != NULL) {
+                    while(input_len + strlen(line) < DEFAULT_DATA_SIZE && fgets(line, DEFAULT_DATA_SIZE - strlen(data), file) != NULL) {
                         strcat(data, line);
+                        input_len += strlen(line);
                     }
                     send_data_packet(sock_fd, client_address, ++out_block_number, data);
-
                     if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size) < 0) {
                         error_exit("Recvfrom failed on server side.");
@@ -162,10 +163,12 @@ int main(int argc, char *argv[]) {
 
                     memset(packet, 0, MAX_PACKET_SIZE);
 
-                    if (strlen(data) < DEFAULT_DATA_SIZE) {
+                    if (input_len + strlen(line) < DEFAULT_DATA_SIZE) {
                         fclose(file);
                         break;
                     }
+                    input_len = 0;
+                    memset(data, 0, DEFAULT_DATA_SIZE);
                 }
             }
             else if (opcode == WRQ) {
@@ -214,11 +217,11 @@ int main(int argc, char *argv[]) {
 
                     memset(packet, 0, MAX_PACKET_SIZE);
                     packet_pos = 0;
-
-                    if (strlen(data) < DEFAULT_DATA_SIZE) {
+                    if (strlen(data) + 1 < DEFAULT_DATA_SIZE) {
                         fclose(file);
                         break;
                     }
+                    memset(data, 0, DEFAULT_DATA_SIZE);
                 }
             }
             else {

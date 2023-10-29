@@ -264,7 +264,7 @@ void data_set(char *data, char *packet) {
 }
 
 char *data_get(char *packet) {
-    char *data = malloc(MAX_STR_LEN);
+    char *data = malloc(DEFAULT_DATA_SIZE);
     if (data == NULL) {
         error_exit("Data malloc failed.");
     }

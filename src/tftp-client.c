@@ -37,6 +37,8 @@ int main(int argc, char *argv[]) {
     packet_pos = 0;
     int out_block_number = 0;
     char data[DEFAULT_DATA_SIZE] = {0};
+    char line[DEFAULT_DATA_SIZE] = {0};
+    int input_len = 0;
 
     // Parse command line arguments.
     parse_args(argc, argv, client_args, &opcode);
@@ -124,7 +126,7 @@ int main(int argc, char *argv[]) {
             memset(&packet, 0, MAX_PACKET_SIZE);
             packet_pos = 0;
 
-            if (strlen(data) < DEFAULT_DATA_SIZE) {
+            if (strlen(data)+1 < DEFAULT_DATA_SIZE) {
                 fclose(file);
                 break;
             }
@@ -148,7 +150,10 @@ int main(int argc, char *argv[]) {
 
         while(true) {
             printf("> ");
-            fgets(data, DEFAULT_DATA_SIZE, stdin);
+            while(input_len + strlen(line) < DEFAULT_DATA_SIZE && fgets(line, DEFAULT_DATA_SIZE - strlen(data), file) != NULL) {
+                strcat(data, line);
+                input_len += strlen(line);
+            }
             send_data_packet(sock_fd, server_address, ++out_block_number, data);
 
             if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
@@ -159,10 +164,11 @@ int main(int argc, char *argv[]) {
             display_message(sock_fd, server_address, packet);
 
             memset(&packet, 0, MAX_PACKET_SIZE);
-
-            if (strlen(data) < DEFAULT_DATA_SIZE) {
+            if (strlen(data) + 1 < DEFAULT_DATA_SIZE) {
                 break;
             }
+            memset(&data, 0, DEFAULT_DATA_SIZE);
+            input_len = 0;
         }
     }
     else {
