@@ -236,7 +236,7 @@ void send_error_packet(int socket, struct sockaddr_in dest_addr, int error_code,
 
 void send_data_packet(int socket, struct sockaddr_in dest_addr, int block_number, char *data);
 
-void handle_client_request(char *packet);
+void handle_request_packet(char *packet);
 
 void handle_ack(char *packet, int expected_block_number);
 
@@ -251,5 +251,7 @@ void print_data_packet(int block_number, char *data);
 void print_error_packet(int error_code, char *error_msg);
 
 void display_message(int socket, struct sockaddr_in source_addr, char *packet);
+
+void send_request_packet(int socket, struct sockaddr_in dest_addr, int opcode, char * file_name);
 
 #endif // UTILS_H

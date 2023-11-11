@@ -44,6 +44,9 @@ int main(int argc, char *argv[]) {
     parse_args(argc, argv, client_args, &opcode);
 
     if (opcode == RRQ) {
+        if (access(client_args->dest_file_path, F_OK) != -1) {
+            error_exit("File already exists.");
+        }
         file = fopen(client_args->dest_file_path, "w");
         if (file == NULL) {
             error_exit("Failed to open file.");
@@ -68,34 +71,14 @@ int main(int argc, char *argv[]) {
     server_address.sin_port = htons(client_args->port);
 
     // Convert IP address from text to binary form.
-    inet_pton(AF_INET, client_args->host_name, &server_address.sin_addr);
-
-    // Filling packet with opcode, filename and mode.
-    opcode_set(opcode, packet);
-    if (opcode == WRQ) {
-        file_name_set(client_args->dest_file_path, packet);
-    }
-    else {
-        file_name_set(client_args->file_path, packet);
-    }
-    empty_byte_insert(packet);
-    mode_set(1, packet); // Set octet mode.
-    empty_byte_insert(packet);
-
-    // Send data to the server.
-    if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM,
-               (const struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
-        error_exit("Sendto failed on client side.");
-    }
-
-    memset(&packet, 0, MAX_PACKET_SIZE);
-    packet_pos = 0;
+    inet_pton(AF_INET, client_args->host_name, &server_address.sin_addr);    
 
     if (opcode == RRQ) {
+        send_request_packet(sock_fd, server_address, RRQ, client_args->file_path);
         while (true) {
             if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
                 error_exit("Recvfrom failed on client side.");
-            }
+            }   
 
             opcode = opcode_get(packet);
             packet_pos = 0;
@@ -133,23 +116,27 @@ int main(int argc, char *argv[]) {
         }
     }
     else if (opcode == WRQ) {
+        send_request_packet(sock_fd, server_address, WRQ, client_args->dest_file_path);
         if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
             error_exit("Recvfrom failed on client side.");
         }
         opcode = opcode_get(packet);
         packet_pos = 0;
-        if(opcode == ERROR) {
-            display_message(sock_fd, server_address, packet);
-            fclose(file);
-            exit(EXIT_FAILURE);
+        switch (opcode) {
+            case ACK:
+                handle_ack(packet, 0);
+                break;
+            case ERROR:
+                display_message(sock_fd, server_address, packet);
+                fclose(file);
+                exit(EXIT_FAILURE);
+            // case OACK:
+            default:
+                error_exit("Invalid opcode.");
         }
-        handle_ack(packet, 0);
         display_message(sock_fd, server_address, packet);
 
-        memset(&packet, 0, MAX_PACKET_SIZE);
-
         while(true) {
-            printf("> ");
             while(input_len + strlen(line) < DEFAULT_DATA_SIZE && fgets(line, DEFAULT_DATA_SIZE - strlen(data), file) != NULL) {
                 strcat(data, line);
                 input_len += strlen(line);

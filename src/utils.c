@@ -113,9 +113,14 @@ char *file_name_get(char *packet) {
 
 void mode_set(int mode, char *packet) {
     // Copy mode to packet.
-    strcpy(packet + packet_pos, mode == 1 ? "octet" : "netascii");
-    // Increment pointer position in packet.
-    packet_pos += strlen(mode == 1 ? "octet" : "netascii");
+    if (mode == 1) {
+        strcpy(packet + packet_pos, "octet");
+        packet_pos += strlen("octet");
+    }
+    else {
+        strcpy(packet + packet_pos, "netascii");
+        packet_pos += strlen("netascii");
+    }
 }
 
 char *mode_get(char *packet) {
@@ -275,7 +280,7 @@ char *data_get(char *packet) {
     return data;
 }
 
-void handle_client_request(char *packet) {
+void handle_request_packet(char *packet) {
     int opcode;
     char *file_name, *mode;
 
@@ -351,6 +356,22 @@ void send_ack_packet(int socket, struct sockaddr_in dest_addr, int block_number)
     packet_pos = 0;
 }
 
+void send_request_packet(int socket, struct sockaddr_in dest_addr, int opcode, char * file_name) {
+    char packet[MAX_PACKET_SIZE];
+    memset(&packet, 0, MAX_PACKET_SIZE);
+
+    opcode_set(opcode, packet);
+    file_name_set(file_name, packet);
+    empty_byte_insert(packet);
+    mode_set(1, packet);
+    empty_byte_insert(packet);
+
+    if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
+        error_exit("Sendto failed.");
+    }
+    packet_pos = 0;
+}
+
 void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
     struct sockaddr_in dest_addr;
     socklen_t dest_addr_size = sizeof(dest_addr);
@@ -400,6 +421,7 @@ void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
             error_exit("Invalid opcode.");
     }
     packet_pos = 0;
+    memset(&packet, 0, MAX_PACKET_SIZE);
 }
 
 void error_code_set(int error_code, char *packet) {

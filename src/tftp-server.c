@@ -92,9 +92,11 @@ int main(int argc, char *argv[]) {
             packet_pos = 0;
 
             sock_fd = create_socket();
+
+            // Generate random port number.
             server_addr.sin_port = htons(0);
 
-            handle_client_request(packet);
+            handle_request_packet(packet);
             display_message(sock_fd, client_address, packet); 
 
             opcode = opcode_get(packet);
@@ -102,14 +104,23 @@ int main(int argc, char *argv[]) {
             strcpy(mode, mode_get(packet));
 
             if (opcode == WRQ) {
-                if (access(file_name, F_OK) == 0) {
+                if (access(file_name, F_OK) != -1) {
                     send_error_packet(sock_fd, client_address, 6, "File already exists.");
                     exit(EXIT_FAILURE);
                 }
                 file = fopen(file_name, "w");
             }
             else if (opcode == RRQ) {
-                file = fopen(file_name, "r");
+                if (strcmp(mode, "netascii") == 0) {
+                    file = fopen(file_name, "r");
+                }
+                else if (strcmp(mode, "octet") == 0) {
+                    file = fopen(file_name, "rb");
+                }
+                else {
+                    send_error_packet(sock_fd, client_address, 4, "Illegal TFTP operation.");
+                    exit(EXIT_FAILURE);
+                }
             }
             else {
                 send_error_packet(sock_fd, client_address, 4, "Illegal TFTP operation.");
