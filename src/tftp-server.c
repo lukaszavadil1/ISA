@@ -26,8 +26,8 @@ int main(int argc, char *argv[]) {
     size_t client_address_size = sizeof(client_address);
 
     // Packet buffer for incoming and outgoing packets.
-    char packet[MAX_PACKET_SIZE];      
-    memset(&packet, 0, MAX_PACKET_SIZE);
+    char packet[DEFAULT_PACKET_SIZE];      
+    memset(&packet, 0, DEFAULT_PACKET_SIZE);
     
     // Initialize server arguments structure and its members.
     ServerArgs_t *server_args;
@@ -40,20 +40,13 @@ int main(int argc, char *argv[]) {
     // Parse command line arguments.
     parse_args(argc, argv, server_args);
 
-    int sock_fd = create_socket();
+    int sock_fd = init_socket(server_args->port, &server_addr);
 
-    // Set Ipv4 address family.
-    server_addr.sin_family = AF_INET;
-
-    // Set port number.
-    server_addr.sin_port = htons(server_args->port);
-
-    // Bind to all interfaces.
+    // Bind server to all interfaces.
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    // Bind socket to the server address and port.
-    if (bind(sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        error_exit("Failed to bind server socket.");
+    if (bind(sock_fd, (const struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        error_exit("Bind failed.");
     }
 
     // Process id
@@ -64,10 +57,10 @@ int main(int argc, char *argv[]) {
         
         signal(SIGINT, sigint_handler);
 
-        memset(packet, 0, MAX_PACKET_SIZE);
+        memset(&packet, 0, DEFAULT_PACKET_SIZE);
         packet_pos = 0;
 
-        if ((recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+        if ((recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                       (socklen_t *) &client_address_size)) < 0) {
             error_exit("Recvfrom failed on server side.");
         }
@@ -80,18 +73,16 @@ int main(int argc, char *argv[]) {
             // Packet data.
             int opcode;
             char file_name[MAX_STR_LEN] = {0};
-            char data[DEFAULT_DATA_SIZE] = {0};
             char mode[MAX_STR_LEN] = {0};
-            char line[DEFAULT_DATA_SIZE] = {0};
+            char path[2*MAX_STR_LEN] = {0};
 
-            // Block numbers for sent and received packets.
             int out_block_number = 0;
-            int input_len = 0;
 
             // Pointer to the current position in packet.
             packet_pos = 0;
+            last = false;
 
-            sock_fd = create_socket();
+            sock_fd = init_socket(0, &server_addr);
 
             // Generate random port number.
             server_addr.sin_port = htons(0);
@@ -102,20 +93,23 @@ int main(int argc, char *argv[]) {
             opcode = opcode_get(packet);
             strcpy(file_name, file_name_get(packet));
             strcpy(mode, mode_get(packet));
+            strcpy(path, server_args->dir_path);
+            strcat(path, "/");
+            strcat(path, file_name);
 
             if (opcode == WRQ) {
-                if (access(file_name, F_OK) != -1) {
+                if (access(path, F_OK) != -1) {
                     send_error_packet(sock_fd, client_address, 6, "File already exists.");
                     exit(EXIT_FAILURE);
                 }
-                file = fopen(file_name, "w");
+                file = fopen(path, "w");
             }
             else if (opcode == RRQ) {
                 if (strcmp(mode, "netascii") == 0) {
-                    file = fopen(file_name, "r");
+                    file = fopen(path, "r");
                 }
                 else if (strcmp(mode, "octet") == 0) {
-                    file = fopen(file_name, "rb");
+                    file = fopen(path, "rb");
                 }
                 else {
                     send_error_packet(sock_fd, client_address, 4, "Illegal TFTP operation.");
@@ -131,24 +125,24 @@ int main(int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
             }           
 
-            memset(packet, 0, MAX_PACKET_SIZE);
+            memset(&packet, 0, DEFAULT_PACKET_SIZE);
             packet_pos = 0;
 
             if (opcode == RRQ) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     // Send OACK packet.
                     opcode_set(OACK, packet);
-                    options_set(packet);
+                    //options_set(packet);
 
                     if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
                                 client_address_size) < 0) {
                         error_exit("Sendto failed on server side.");
                     }
 
-                    memset(packet, 0, MAX_PACKET_SIZE);
+                    memset(&packet, 0, DEFAULT_PACKET_SIZE);
                     packet_pos = 0;
 
-                    if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+                    if (recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size) < 0) {
                         error_exit("Recvfrom failed on server side.");
                     }
@@ -156,36 +150,26 @@ int main(int argc, char *argv[]) {
                     handle_ack(packet, 0);
                     display_message(sock_fd, client_address, packet);
 
-                    memset(packet, 0, MAX_PACKET_SIZE);
+                    memset(&packet, 0, DEFAULT_PACKET_SIZE);
                 }
                 while(true) {
-                    while(input_len + strlen(line) < DEFAULT_DATA_SIZE && fgets(line, DEFAULT_DATA_SIZE - strlen(data), file) != NULL) {
-                        strcat(data, line);
-                        input_len += strlen(line);
-                    }
-                    send_data_packet(sock_fd, client_address, ++out_block_number, data);
-                    if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+                    last = send_data_packet(sock_fd, client_address, ++out_block_number, file);
+                    if (recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size) < 0) {
                         error_exit("Recvfrom failed on server side.");
                     }
-
                     handle_ack(packet, out_block_number);
                     display_message(sock_fd, client_address, packet);
-
-                    memset(packet, 0, MAX_PACKET_SIZE);
-
-                    if (input_len + strlen(line) < DEFAULT_DATA_SIZE) {
+                    if (last == true) {
                         fclose(file);
                         break;
                     }
-                    input_len = 0;
-                    memset(data, 0, DEFAULT_DATA_SIZE);
                 }
             }
             else if (opcode == WRQ) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     opcode_set(OACK, packet);
-                    options_set(packet);
+                    //options_set(packet);
                 }
                 else {
                     opcode_set(ACK, packet);
@@ -197,26 +181,19 @@ int main(int argc, char *argv[]) {
                         error_exit("Sendto failed on server side.");
                     }
 
-                memset(packet, 0, MAX_PACKET_SIZE);
+                memset(&packet, 0, DEFAULT_PACKET_SIZE);
                 packet_pos = 0;
 
                 while (true) {
-                    if (recvfrom(sock_fd, (char *)packet, MAX_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+                    if (recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size) < 0) {
                         error_exit("Recvfrom failed on server side.");
                     }
 
-                    out_block_number++;
-                    handle_data(packet, out_block_number);
-
-                    // Stdin -> server -> file
-                    strcpy(data, data_get(packet));
-                    fputs(data, file);
+                    last = handle_data(packet, ++out_block_number, file);
                     packet_pos = 0;
-
                     display_message(sock_fd, client_address, packet);
-
-                    memset(packet, 0, MAX_PACKET_SIZE);
+                    memset(&packet, 0, DEFAULT_PACKET_SIZE);
 
                     opcode_set(ACK, packet);
                     block_number_set(out_block_number, packet);
@@ -226,13 +203,13 @@ int main(int argc, char *argv[]) {
                         error_exit("Sendto failed on server side.");
                     }
 
-                    memset(packet, 0, MAX_PACKET_SIZE);
+                    memset(&packet, 0, DEFAULT_PACKET_SIZE);
                     packet_pos = 0;
-                    if (strlen(data) + 1 < DEFAULT_DATA_SIZE) {
+
+                    if (last == true) {
                         fclose(file);
                         break;
                     }
-                    memset(data, 0, DEFAULT_DATA_SIZE);
                 }
             }
             else {

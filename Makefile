@@ -8,6 +8,9 @@ SERVER_OBJ = obj/tftp-server.o $(UTILS_OBJ)
 CLIENT_BIN = bin/tftp-client
 SERVER_BIN = bin/tftp-server
 
+ROOT_DIR = root_dir/*.txt
+CLIENT_DIR = client_dir/*.txt
+
 all: $(CLIENT_BIN) $(SERVER_BIN)
 
 $(CLIENT_BIN): $(CLIENT_OBJ)
@@ -20,4 +23,4 @@ obj/%.o: src/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(CLIENT_BIN) $(SERVER_BIN) $(CLIENT_OBJ) $(SERVER_OBJ) $(UTILS_OBJ)
+	rm -f $(CLIENT_BIN) $(SERVER_BIN) $(CLIENT_OBJ) $(SERVER_OBJ) $(UTILS_OBJ) $(ROOT_DIR) $(CLIENT_DIR)

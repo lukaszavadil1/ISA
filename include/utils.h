@@ -22,11 +22,13 @@
 #include <signal.h>
 #include <dirent.h>
 
-// Maximal length of string.
 #define MAX_STR_LEN 256
 #define DEFAULT_DATA_SIZE 512
-#define MAX_PACKET_SIZE 516
+#define DEFAULT_PACKET_SIZE 516
 #define DEFAULT_PORT_NUM 69
+#define OPCODE_SIZE 2
+#define BLOCK_NUMBER_SIZE 2
+#define ERROR_CODE_SIZE 2
 
 // Opcode values based on TFTP RFC 1350.
 #define RRQ 1
@@ -35,6 +37,9 @@
 #define ACK 4
 #define ERROR 5
 #define OACK 6
+
+#define NETASCII 0
+#define OCTET 1
 
 #define TIMEOUT 0
 #define TSIZE 1
@@ -55,6 +60,7 @@
 #define ERR_NO_SUCH_USER 7
 
 extern int packet_pos;
+extern bool last;
 
 // Struct for storing options.
 typedef struct Option {
@@ -100,9 +106,12 @@ void display_server_help();
 /**
 * @brief Create unbouded socket.
 *
+* @param port Port number.
+* @param addr Pointer to sockaddr_in struct.
+*
 * @return Socket file descriptor.
 */
-int create_socket();
+int init_socket(int port, struct sockaddr_in *addr);
 
 /**
 * @brief Handle SIGINT signal.
@@ -179,15 +188,6 @@ char *mode_get(char *packet);
 */
 void empty_byte_insert(char *packet);
 
-/**
-* @brief Get opcode string from opcode.
-*
-* @param opcode Opcode.
-*
-* @return Opcode string.
-*/
-char *opcode_to_str(int opcode);
-
 void option_set(int type, long int value);
 
 bool option_get_flag(int type);
@@ -234,13 +234,13 @@ char *error_msg_get(char *packet);
 
 void send_error_packet(int socket, struct sockaddr_in dest_addr, int error_code, char *error_msg);
 
-void send_data_packet(int socket, struct sockaddr_in dest_addr, int block_number, char *data);
+bool send_data_packet(int socket, struct sockaddr_in dest_addr, int block_number, FILE *file);
 
 void handle_request_packet(char *packet);
 
 void handle_ack(char *packet, int expected_block_number);
 
-void handle_data(char *packet, int expected_block_number);
+bool handle_data(char *packet, int expected_block_number, FILE *file);
 
 void print_oack_packet();
 
