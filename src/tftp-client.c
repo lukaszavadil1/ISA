@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
 
     // Packet from client.
     char packet[DEFAULT_PACKET_SIZE];
-    memset(&packet, 0, DEFAULT_PACKET_SIZE);
+    memset(packet, 0, DEFAULT_PACKET_SIZE);
     strcpy(packet, client_args->file_path);
 
     // Create socket.
@@ -73,15 +73,24 @@ int main(int argc, char *argv[]) {
             }
             opcode = opcode_get(packet);
             packet_pos = 0;
-            if (opcode == ERROR) {
-                display_message(sock_fd, server_address, packet);
-                fclose(file);
-                exit(EXIT_FAILURE);
+            switch(opcode) {
+                case DATA:
+                    last = handle_data(packet, ++out_block_number, file);
+                    packet_pos = 0;
+                    display_message(sock_fd, server_address, packet);
+                    memset(packet, 0, DEFAULT_PACKET_SIZE);
+                    break;
+                case ERROR:
+                    display_message(sock_fd, server_address, packet);
+                    fclose(file);
+                    exit(EXIT_FAILURE);
+                case OACK:
+                    display_message(sock_fd, server_address, packet);
+                    memset(packet, 0, DEFAULT_PACKET_SIZE);
+                    break;
+                default:
+                    error_exit("Invalid opcode.");
             }
-            last = handle_data(packet, ++out_block_number, file);
-            packet_pos = 0;
-            display_message(sock_fd, server_address, packet);
-            memset(&packet, 0, DEFAULT_PACKET_SIZE);
 
             opcode_set(ACK, packet);
             block_number_set(out_block_number, packet);
@@ -91,7 +100,7 @@ int main(int argc, char *argv[]) {
                 error_exit("Sendto failed on client side.");
             }
 
-            memset(&packet, 0, DEFAULT_PACKET_SIZE);
+            memset(packet, 0, DEFAULT_PACKET_SIZE);
             packet_pos = 0;
 
             if (last == true) {

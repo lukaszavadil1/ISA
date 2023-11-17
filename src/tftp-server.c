@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
 
     // Packet buffer for incoming and outgoing packets.
     char packet[DEFAULT_PACKET_SIZE];      
-    memset(&packet, 0, DEFAULT_PACKET_SIZE);
+    memset(packet, 0, DEFAULT_PACKET_SIZE);
     
     // Initialize server arguments structure and its members.
     ServerArgs_t *server_args;
@@ -54,12 +54,13 @@ int main(int argc, char *argv[]) {
 
     // Listen for incoming client connections.
     while (true) {
-        
+        // Handle SIGINT signal.
         signal(SIGINT, sigint_handler);
 
-        memset(&packet, 0, DEFAULT_PACKET_SIZE);
+        memset(packet, 0, DEFAULT_PACKET_SIZE);
         packet_pos = 0;
 
+        // Listen for incoming request packets.
         if ((recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                       (socklen_t *) &client_address_size)) < 0) {
             error_exit("Recvfrom failed on server side.");
@@ -70,24 +71,30 @@ int main(int argc, char *argv[]) {
             error_exit("Server fork failed.");
         }
         else if (pid == 0) {
-            // Packet data.
+            // Request packet attributes.
             int opcode;
             char file_name[MAX_STR_LEN] = {0};
             char mode[MAX_STR_LEN] = {0};
             char path[2*MAX_STR_LEN] = {0};
-
             int out_block_number = 0;
 
             // Pointer to the current position in packet.
             packet_pos = 0;
+            // Last packet flag.
             last = false;
 
+            // Initialize socket.
             sock_fd = init_socket(0, &server_addr);
 
-            // Generate random port number.
+            // Generate random port number to respond from.
             server_addr.sin_port = htons(0);
 
+            // Handle request packet from client and display it.
             handle_request_packet(packet);
+            for (int i = 0; i < DEFAULT_PACKET_SIZE; i++) {
+                printf("%c ", packet[i]);
+            }
+            printf("\n");
             display_message(sock_fd, client_address, packet); 
 
             opcode = opcode_get(packet);
@@ -97,6 +104,7 @@ int main(int argc, char *argv[]) {
             strcat(path, "/");
             strcat(path, file_name);
 
+            //file = open_file(packet, server_args->dir_path, client_address);
             if (opcode == WRQ) {
                 if (access(path, F_OK) != -1) {
                     send_error_packet(sock_fd, client_address, 6, "File already exists.");
@@ -125,23 +133,12 @@ int main(int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
             }           
 
-            memset(&packet, 0, DEFAULT_PACKET_SIZE);
+            memset(packet, 0, DEFAULT_PACKET_SIZE);
             packet_pos = 0;
 
             if (opcode == RRQ) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
-                    // Send OACK packet.
-                    opcode_set(OACK, packet);
-                    //options_set(packet);
-
-                    if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
-                                client_address_size) < 0) {
-                        error_exit("Sendto failed on server side.");
-                    }
-
-                    memset(&packet, 0, DEFAULT_PACKET_SIZE);
-                    packet_pos = 0;
-
+                    send_oack_packet(sock_fd, client_address);
                     if (recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size) < 0) {
                         error_exit("Recvfrom failed on server side.");
@@ -150,7 +147,7 @@ int main(int argc, char *argv[]) {
                     handle_ack(packet, 0);
                     display_message(sock_fd, client_address, packet);
 
-                    memset(&packet, 0, DEFAULT_PACKET_SIZE);
+                    memset(packet, 0, DEFAULT_PACKET_SIZE);
                 }
                 while(true) {
                     last = send_data_packet(sock_fd, client_address, ++out_block_number, file);
@@ -169,7 +166,7 @@ int main(int argc, char *argv[]) {
             else if (opcode == WRQ) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     opcode_set(OACK, packet);
-                    //options_set(packet);
+                    options_set(packet);
                 }
                 else {
                     opcode_set(ACK, packet);
@@ -181,7 +178,7 @@ int main(int argc, char *argv[]) {
                         error_exit("Sendto failed on server side.");
                     }
 
-                memset(&packet, 0, DEFAULT_PACKET_SIZE);
+                memset(packet, 0, DEFAULT_PACKET_SIZE);
                 packet_pos = 0;
 
                 while (true) {
@@ -193,7 +190,7 @@ int main(int argc, char *argv[]) {
                     last = handle_data(packet, ++out_block_number, file);
                     packet_pos = 0;
                     display_message(sock_fd, client_address, packet);
-                    memset(&packet, 0, DEFAULT_PACKET_SIZE);
+                    memset(packet, 0, DEFAULT_PACKET_SIZE);
 
                     opcode_set(ACK, packet);
                     block_number_set(out_block_number, packet);
@@ -203,7 +200,7 @@ int main(int argc, char *argv[]) {
                         error_exit("Sendto failed on server side.");
                     }
 
-                    memset(&packet, 0, DEFAULT_PACKET_SIZE);
+                    memset(packet, 0, DEFAULT_PACKET_SIZE);
                     packet_pos = 0;
 
                     if (last == true) {

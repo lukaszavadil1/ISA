@@ -26,6 +26,8 @@
 #define DEFAULT_DATA_SIZE 512
 #define DEFAULT_PACKET_SIZE 516
 #define DEFAULT_PORT_NUM 69
+
+// Static sizes of packet's parts.
 #define OPCODE_SIZE 2
 #define BLOCK_NUMBER_SIZE 2
 #define ERROR_CODE_SIZE 2
@@ -66,6 +68,7 @@ extern bool last;
 typedef struct Option {
     bool flag;
     long int value;
+    int order;
 } Option_t;
 
 // Array of options.
@@ -107,7 +110,7 @@ void display_server_help();
 * @brief Create unbouded socket.
 *
 * @param port Port number.
-* @param addr Pointer to sockaddr_in struct.
+* @param addr Pointer to socket address.
 *
 * @return Socket file descriptor.
 */
@@ -125,7 +128,7 @@ void sigint_handler(int sig);
 /**
 * @brief Set packet's opcode.
 *
-* @param opcode Opcode.
+* @param opcode Opcode to be set.
 * @param packet Pointer to packet.
 *
 * @return void
@@ -137,14 +140,14 @@ void opcode_set(int opcode, char *packet);
 *
 * @param packet Pointer to packet.
 *
-* @return Opcode.
+* @return Packet's opcode.
 */
 int opcode_get(char *packet);
 
 /**
 * @brief Set packet's file name.
 *
-* @param file_name File name.
+* @param file_name File name to be set.
 * @param packet Pointer to packet.
 *
 * @return void
@@ -156,14 +159,14 @@ void file_name_set(char *file_name, char *packet);
 *
 * @param packet Pointer to packet.
 *
-* @return File name.
+* @return Packet's file name.
 */
 char *file_name_get(char *packet);
 
 /**
 * @brief Set packet's mode.
 *
-* @param mode Mode.
+* @param mode Mode to be set.
 * @param packet Pointer to packet.
 *
 * @return void
@@ -175,7 +178,7 @@ void mode_set(int mode, char *packet);
 *
 * @param packet Pointer to packet.
 *
-* @return Mode.
+* @return Packet's mode.
 */
 char *mode_get(char *packet);
 
@@ -188,7 +191,7 @@ char *mode_get(char *packet);
 */
 void empty_byte_insert(char *packet);
 
-void option_set(int type, long int value);
+void option_set(int type, long int value, int order);
 
 bool option_get_flag(int type);
 
@@ -216,12 +219,43 @@ void options_load(char *packet);
 */
 void options_set(char *packet);
 
+/**
+*
+* @brief Set packet's block number.
+*
+* @param block_number Block number to be set.
+* @param packet Pointer to packet.
+*
+* @return void
+*/
 void block_number_set(int block_number, char *packet);
 
+/**
+* @brief Get packet's block number.
+*
+* @param packet Pointer to packet.
+*
+* @return Packet's block number.
+*/
 int block_number_get(char *packet);
 
+/**
+* @brief Set packet's data.
+*
+* @param data Data to be set.
+* @param packet Pointer to packet.
+*
+* @return void
+*/
 void data_set(char *data, char *packet);
 
+/**
+* @brief Get packet's data.
+*
+* @param packet Pointer to packet.
+*
+* @return Packet's data.
+*/
 char *data_get(char *packet);
 
 void error_code_set(int error_code, char *packet);
@@ -231,6 +265,10 @@ int error_code_get(char *packet);
 void error_msg_set(char *error_msg, char *packet);
 
 char *error_msg_get(char *packet);
+
+void send_ack_packet(int socket, struct sockaddr_in dest_addr, int block_number);
+
+void send_oack_packet(int socket, struct sockaddr_in dest_addr);
 
 void send_error_packet(int socket, struct sockaddr_in dest_addr, int error_code, char *error_msg);
 
@@ -251,6 +289,8 @@ void print_data_packet(int block_number, char *data);
 void print_error_packet(int error_code, char *error_msg);
 
 void display_message(int socket, struct sockaddr_in source_addr, char *packet);
+
+void display_options(char *packet);
 
 void send_request_packet(int socket, struct sockaddr_in dest_addr, int opcode, char * file_name);
 
