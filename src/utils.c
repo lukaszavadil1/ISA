@@ -82,7 +82,7 @@ int opcode_get(char *packet) {
 
 void file_name_set(char *file_name, char *packet) {
     // Save file name inside packet.
-    if (strlen(file_name) > MAX_FILE_NAME_LEN - 1) {
+    if (strlen(file_name) == MAX_FILE_NAME_LEN) {
         error_exit("File name too long.");
     }
     strncpy(packet_pos + packet, file_name, MAX_FILE_NAME_LEN);
@@ -336,7 +336,7 @@ void send_request_packet(int socket, struct sockaddr_in dest_addr, int opcode, c
     mode_set(OCTET, packet);
     empty_byte_insert(packet);
     // Set options.
-    option_set(BLKSIZE, 80, 1);
+    option_set(BLKSIZE, 1024, 1);
     option_set(TIMEOUT, 5, 0);
     options_set(packet);
     

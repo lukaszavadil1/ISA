@@ -25,8 +25,7 @@ int main(int argc, char *argv[]) {
     size_t server_address_size = sizeof(server_address);
 
     // Packet attributes.
-    char packet[DEFAULT_PACKET_SIZE];
-    memset(packet, 0, DEFAULT_PACKET_SIZE);
+    char *packet = calloc(DEFAULT_PACKET_SIZE, sizeof(char));
     opcode = WRQ;
     out_block_number = 0;
     packet_pos = 0;

@@ -26,8 +26,7 @@ int main(int argc, char *argv[]) {
     size_t client_address_size = sizeof(client_address);
 
     // Packet buffer for incoming and outgoing packets.
-    char packet[DEFAULT_PACKET_SIZE];      
-    memset(packet, 0, DEFAULT_PACKET_SIZE);
+    char *packet = calloc(DEFAULT_PACKET_SIZE, sizeof(char));      
     
     // Initialize server arguments structure and its members.
     ServerArgs_t *server_args;
@@ -126,7 +125,9 @@ int main(int argc, char *argv[]) {
                     send_ack_packet(sock_fd, client_address, 0);
                 }
                 while (true) {
-                    memset(packet, 0, options[BLKSIZE].value + 4);
+                    int packet_size = options[BLKSIZE].value + 4;
+                    packet = realloc(packet, packet_size);
+                    memset(packet, 0, packet_size);
                     if (recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size) < 0) {
                         error_exit("Recvfrom failed on server side.");

@@ -356,13 +356,6 @@ void options_load(char *packet);
 void options_set(char *packet);
 
 /**
-* @brief Apply options.
-*
-* @return void
-*/
-void options_apply();
-
-/**
 * @brief Handle request packet.
 *
 * @param packet Pointer to packet.
