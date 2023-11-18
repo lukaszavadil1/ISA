@@ -24,15 +24,18 @@
 
 #define MAX_STR_LEN 256
 #define DEFAULT_DATA_SIZE 512
+#define DEFAULT_REQUEST_SIZE 512
 #define DEFAULT_PACKET_SIZE 516
+
+// Default port number for TFTP.
 #define DEFAULT_PORT_NUM 69
 
-// Static sizes of packet's parts.
+// Sizes of static parts of packets.
 #define OPCODE_SIZE 2
 #define BLOCK_NUMBER_SIZE 2
 #define ERROR_CODE_SIZE 2
 
-// Opcode values based on TFTP RFC 1350.
+// Opcode values.
 #define RRQ 1
 #define WRQ 2
 #define DATA 3
@@ -40,12 +43,17 @@
 #define ERROR 5
 #define OACK 6
 
+// Supported modes.
 #define NETASCII 0
 #define OCTET 1
 
+// Supported options.
 #define TIMEOUT 0
 #define TSIZE 1
 #define BLKSIZE 2
+#define BLKSIZE_MIN 8
+#define BLKSIZE_MAX 65464
+#define BLKSIZE_DEFAULT 512
 #define TIMEOUT_NAME "timeout"
 #define TSIZE_NAME "tsize"
 #define BLKSIZE_NAME "blksize"
@@ -191,36 +199,7 @@ char *mode_get(char *packet);
 */
 void empty_byte_insert(char *packet);
 
-void option_set(int type, long int value, int order);
-
-bool option_get_flag(int type);
-
-long int option_get_value(int type);
-
-char *option_get_name(int type);
-
-int option_get_type(char *name);
-
 /**
-* @brief Load options from packet.
-*
-* @param packet Pointer to packet.
-*
-* @return void
-*/
-void options_load(char *packet);
-
-/**
-* @brief Set options in packet.
-*
-* @param packet Pointer to packet.
-*
-* @return void
-*/
-void options_set(char *packet);
-
-/**
-*
 * @brief Set packet's block number.
 *
 * @param block_number Block number to be set.
@@ -242,12 +221,12 @@ int block_number_get(char *packet);
 /**
 * @brief Set packet's data.
 *
-* @param data Data to be set.
 * @param packet Pointer to packet.
+* @param file Pointer to file.
 *
 * @return void
 */
-void data_set(char *data, char *packet);
+void data_set(char *packet, FILE *file);
 
 /**
 * @brief Get packet's data.
@@ -258,40 +237,254 @@ void data_set(char *data, char *packet);
 */
 char *data_get(char *packet);
 
+/**
+* @brief Set packet's error code.
+*
+* @param error_code Error code to be set.
+* @param packet Pointer to packet.
+*
+* @return void
+*/
 void error_code_set(int error_code, char *packet);
 
+/**
+* @brief Get packet's error code.
+*
+* @param packet Pointer to packet.
+*
+* @return Packet's error code.
+*/
 int error_code_get(char *packet);
 
+/**
+* @brief Set packet's error message.
+*
+* @param error_msg Error message to be set.
+* @param packet Pointer to packet.
+*
+* @return void
+*/
 void error_msg_set(char *error_msg, char *packet);
 
+/**
+* @brief Get packet's error message.
+*
+* @param packet Pointer to packet.
+*
+* @return Packet's error message.
+*/
 char *error_msg_get(char *packet);
 
-void send_ack_packet(int socket, struct sockaddr_in dest_addr, int block_number);
+/**
+* @brief Set packet option's flag, value and order.
+*
+* @param type Option type.
+* @param value Option value.
+* @param order Option order.
+*
+* @return void
+*/
+void option_set(int type, long int value, int order);
 
-void send_oack_packet(int socket, struct sockaddr_in dest_addr);
+/**
+* @brief Get packet option's type.
+*
+* @param name Option name.
+*
+* @return Option type.
+*/
+int option_get_type(char *name);
 
-void send_error_packet(int socket, struct sockaddr_in dest_addr, int error_code, char *error_msg);
+/**
+* @brief Get packet option's value.
+*
+* @param type Option type.
+*
+* @return Option value.
+*/
+long int option_get_value(int type);
 
-bool send_data_packet(int socket, struct sockaddr_in dest_addr, int block_number, FILE *file);
+/**
+* @brief Get packet option's order.
+*
+* @param type Option type.
+*
+* @return Option order.
+*/
+int option_get_order(int type);
 
+/**
+* @brief Get packet option's flag.
+*
+* @param type Option type.
+*
+* @return Option flag.
+*/
+bool option_get_flag(int type);
+
+/**
+* @brief Get packet option's string name.
+*
+* @param type Option type.
+*
+* @return Option name.
+*/
+char *option_get_name(int type);
+
+/**
+* @brief Load options from packet.
+*
+* @param packet Pointer to packet.
+*
+* @return void
+*/
+void options_load(char *packet);
+
+/**
+* @brief Set options in packet.
+*
+* @param packet Pointer to packet.
+*
+* @return void
+*/
+void options_set(char *packet);
+
+/**
+* @brief Handle request packet.
+*
+* @param packet Pointer to packet.
+*
+* @return void
+*/
 void handle_request_packet(char *packet);
 
-void handle_ack(char *packet, int expected_block_number);
+/**
+* @brief Send request packet.
+*
+* @param socket Socket file descriptor.
+* @param dest_addr Destination address.
+* @param opcode Opcode.
+* @param file_name File name.
+*
+* @return void
+*/
+void send_request_packet(int socket, struct sockaddr_in dest_addr, int opcode, char * file_name);
 
-bool handle_data(char *packet, int expected_block_number, FILE *file);
+/**
+* @brief Handle ack packet.
+*
+* @param packet Pointer to packet.
+* @param expected_block_number Expected block number.
+*
+* @return void
+*/
+void handle_ack_packet(char *packet, int expected_block_number);
 
-void print_oack_packet();
+/**
+* @brief Send ack packet.
+*
+* @param socket Socket file descriptor.
+* @param dest_addr Destination address.
+* @param block_number Block number.
+*
+* @return void
+*/
+void send_ack_packet(int socket, struct sockaddr_in dest_addr, int block_number);
 
-void print_ack_packet(int block_number);
+/**
+* @brief Handle oack packet.
+*
+* @param packet Pointer to packet.
+*
+* @return void
+*/
+void handle_oack_packet(char *packet);
 
-void print_data_packet(int block_number, char *data);
+/**
+* @brief Send oack packet.
+*
+* @param socket Socket file descriptor.
+* @param dest_addr Destination address.
+*
+* @return void
+*/
+void send_oack_packet(int socket, struct sockaddr_in dest_addr);
 
-void print_error_packet(int error_code, char *error_msg);
+/**
+* @brief Handle data packet.
+*
+* @param packet Pointer to packet.
+* @param expected_block_number Expected block number.
+* @param file Pointer to file.
+*
+* @return True if last packet, false otherwise.
+*/
+bool handle_data_packet(char *packet, int expected_block_number, FILE *file);
 
+/**
+* @brief Send data packet.
+*
+* @param socket Socket file descriptor.
+* @param dest_addr Destination address.
+* @param block_number Block number.
+* @param file Pointer to file.
+*
+* @return True if last packet, false otherwise.
+*/
+bool send_data_packet(int socket, struct sockaddr_in dest_addr, int block_number, FILE *file);
+
+/**
+* @brief Send error packet.
+*
+* @param socket Socket file descriptor.
+* @param dest_addr Destination address.
+* @param error_code Error code.
+* @param error_msg Error message.
+*
+* @return void
+*/
+void send_error_packet(int socket, struct sockaddr_in dest_addr, int error_code, char *error_msg);
+
+/**
+* @brief Display received packet in a formatted way.
+*
+* @param socket Socket file descriptor.
+* @param source_addr Source address.
+* @param packet Pointer to packet.
+*
+* @return void
+*/
 void display_message(int socket, struct sockaddr_in source_addr, char *packet);
 
+/**
+* @brief Display options in a formatted way.
+*
+* @param packet Pointer to packet.
+*
+* @return void
+*/
 void display_options(char *packet);
 
-void send_request_packet(int socket, struct sockaddr_in dest_addr, int opcode, char * file_name);
+/**
+* @brief Construct full path to file and open it correctly.
+*
+* @param socket Socket file descriptor.
+* @param packet Pointer to packet.
+* @param dir_path Directory path.
+* @param source_addr Source address.
+*
+* @return Pointer to file.
+*/
+FILE *open_file(int socket, char *packet, char *dir_path, struct sockaddr_in source_addr);
+
+/**
+* @brief Strlen with maximum length.
+*
+* @param s String.
+* @param maxlen Maximum length.
+*
+* @return String length.
+*/
+size_t strnlen(const char *s, size_t maxlen);
 
 #endif // UTILS_H

@@ -24,6 +24,14 @@ int main(int argc, char *argv[]) {
     memset(&server_address, 0, sizeof(server_address));
     size_t server_address_size = sizeof(server_address);
 
+    // Packet attributes.
+    char packet[DEFAULT_PACKET_SIZE];
+    memset(packet, 0, DEFAULT_PACKET_SIZE);
+    opcode = WRQ;
+    out_block_number = 0;
+    packet_pos = 0;
+    last = false;
+
     // Initialize client arguments structure and its members.
     ClientArgs_t *client_args;
     client_args = malloc(sizeof(ClientArgs_t));
@@ -32,32 +40,11 @@ int main(int argc, char *argv[]) {
     }
     init_args(client_args);
 
-    // Default opcode.
-    int opcode = WRQ;
-    packet_pos = 0;
-    last = false;
-    int out_block_number = 0;
-
     // Parse command line arguments.
     parse_args(argc, argv, client_args, &opcode);
 
-    if (opcode == RRQ) {
-        if (access(client_args->dest_file_path, F_OK) != -1) {
-            error_exit("File already exists.");
-        }
-        file = fopen(client_args->dest_file_path, "w");
-        if (file == NULL) {
-            error_exit("Failed to open file.");
-        }
-    }
-    else {
-        file = stdin;
-    }
-
-    // Packet from client.
-    char packet[DEFAULT_PACKET_SIZE];
-    memset(packet, 0, DEFAULT_PACKET_SIZE);
-    strcpy(packet, client_args->file_path);
+    // Handle client data stream.
+    file = client_data_stream(opcode, client_args);
 
     // Create socket.
     int sock_fd = init_socket(client_args->port, &server_address);
@@ -75,8 +62,7 @@ int main(int argc, char *argv[]) {
             packet_pos = 0;
             switch(opcode) {
                 case DATA:
-                    last = handle_data(packet, ++out_block_number, file);
-                    packet_pos = 0;
+                    last = handle_data_packet(packet, ++out_block_number, file);
                     display_message(sock_fd, server_address, packet);
                     memset(packet, 0, DEFAULT_PACKET_SIZE);
                     break;
@@ -118,13 +104,15 @@ int main(int argc, char *argv[]) {
         packet_pos = 0;
         switch (opcode) {
             case ACK:
-                handle_ack(packet, 0);
+                handle_ack_packet(packet, 0);
                 break;
             case ERROR:
                 display_message(sock_fd, server_address, packet);
                 fclose(file);
                 exit(EXIT_FAILURE);
-            // case OACK:
+            case OACK:
+                handle_oack_packet(packet);
+                break;
             default:
                 error_exit("Invalid opcode.");
         }
@@ -136,7 +124,7 @@ int main(int argc, char *argv[]) {
                 error_exit("Recvfrom failed on client side.");
             }
 
-            handle_ack(packet, out_block_number);
+            handle_ack_packet(packet, out_block_number);
             display_message(sock_fd, server_address, packet);
 
             if (last == true) {
@@ -152,10 +140,10 @@ int main(int argc, char *argv[]) {
 }
 
 void init_args(ClientArgs_t *client_args) {
-    client_args->host_name = malloc(MAX_STR_LEN);
+    client_args->host_name = calloc(MAX_STR_LEN, sizeof(char));
     client_args->port = DEFAULT_PORT_NUM;
-    client_args->file_path = malloc(MAX_STR_LEN);
-    client_args->dest_file_path = malloc(MAX_STR_LEN);
+    client_args->file_path = calloc(MAX_STR_LEN, sizeof(char));
+    client_args->dest_file_path = calloc(MAX_STR_LEN, sizeof(char));
     if (client_args->host_name == NULL || client_args->file_path == NULL || client_args->dest_file_path == NULL) {
         error_exit("Client args member malloc failed.");
     }
@@ -228,4 +216,20 @@ void parse_args(int argc, char *argv[], ClientArgs_t *client_args, int *opcode) 
     if (t_flag == false) {
         error_exit("Missing flag -t.");
     }
+}
+
+FILE *client_data_stream(int opcode, ClientArgs_t *client_args) {
+    if (opcode == RRQ) {
+        if (access(client_args->dest_file_path, F_OK) != -1) {
+            error_exit("File already exists.");
+        }
+        file = fopen(client_args->dest_file_path, "w");
+        if (file == NULL) {
+            error_exit("Failed to open file.");
+        }
+    }
+    else {
+        file = stdin;
+    }
+    return file;
 }

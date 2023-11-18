@@ -73,9 +73,6 @@ int main(int argc, char *argv[]) {
         else if (pid == 0) {
             // Request packet attributes.
             int opcode;
-            char file_name[MAX_STR_LEN] = {0};
-            char mode[MAX_STR_LEN] = {0};
-            char path[2*MAX_STR_LEN] = {0};
             int out_block_number = 0;
 
             // Pointer to the current position in packet.
@@ -91,50 +88,11 @@ int main(int argc, char *argv[]) {
 
             // Handle request packet from client and display it.
             handle_request_packet(packet);
-            for (int i = 0; i < DEFAULT_PACKET_SIZE; i++) {
-                printf("%c ", packet[i]);
-            }
-            printf("\n");
             display_message(sock_fd, client_address, packet); 
 
+            file = open_file(sock_fd, packet, server_args->dir_path, client_address);
+
             opcode = opcode_get(packet);
-            strcpy(file_name, file_name_get(packet));
-            strcpy(mode, mode_get(packet));
-            strcpy(path, server_args->dir_path);
-            strcat(path, "/");
-            strcat(path, file_name);
-
-            //file = open_file(packet, server_args->dir_path, client_address);
-            if (opcode == WRQ) {
-                if (access(path, F_OK) != -1) {
-                    send_error_packet(sock_fd, client_address, 6, "File already exists.");
-                    exit(EXIT_FAILURE);
-                }
-                file = fopen(path, "w");
-            }
-            else if (opcode == RRQ) {
-                if (strcmp(mode, "netascii") == 0) {
-                    file = fopen(path, "r");
-                }
-                else if (strcmp(mode, "octet") == 0) {
-                    file = fopen(path, "rb");
-                }
-                else {
-                    send_error_packet(sock_fd, client_address, 4, "Illegal TFTP operation.");
-                    exit(EXIT_FAILURE);
-                }
-            }
-            else {
-                send_error_packet(sock_fd, client_address, 4, "Illegal TFTP operation.");
-                exit(EXIT_FAILURE);
-            }
-            if (file == NULL) {
-                send_error_packet(sock_fd, client_address, 1, "File not found.");
-                exit(EXIT_FAILURE);
-            }           
-
-            memset(packet, 0, DEFAULT_PACKET_SIZE);
-            packet_pos = 0;
 
             if (opcode == RRQ) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
@@ -144,7 +102,7 @@ int main(int argc, char *argv[]) {
                         error_exit("Recvfrom failed on server side.");
                     }
                     
-                    handle_ack(packet, 0);
+                    handle_ack_packet(packet, 0);
                     display_message(sock_fd, client_address, packet);
 
                     memset(packet, 0, DEFAULT_PACKET_SIZE);
@@ -155,7 +113,7 @@ int main(int argc, char *argv[]) {
                                 (socklen_t *) &client_address_size) < 0) {
                         error_exit("Recvfrom failed on server side.");
                     }
-                    handle_ack(packet, out_block_number);
+                    handle_ack_packet(packet, out_block_number);
                     display_message(sock_fd, client_address, packet);
                     if (last == true) {
                         fclose(file);
@@ -165,44 +123,22 @@ int main(int argc, char *argv[]) {
             }
             else if (opcode == WRQ) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
-                    opcode_set(OACK, packet);
-                    options_set(packet);
+                    send_oack_packet(sock_fd, client_address);
                 }
                 else {
-                    opcode_set(ACK, packet);
-                    block_number_set(0, packet);
+                    send_ack_packet(sock_fd, client_address, 0);
                 }
-
-                if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
-                                client_address_size) < 0) {
-                        error_exit("Sendto failed on server side.");
-                    }
-
-                memset(packet, 0, DEFAULT_PACKET_SIZE);
-                packet_pos = 0;
-
                 while (true) {
+                    memset(packet, 0, DEFAULT_PACKET_SIZE);
                     if (recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size) < 0) {
                         error_exit("Recvfrom failed on server side.");
                     }
-
-                    last = handle_data(packet, ++out_block_number, file);
-                    packet_pos = 0;
+                    last = handle_data_packet(packet, ++out_block_number, file);
                     display_message(sock_fd, client_address, packet);
                     memset(packet, 0, DEFAULT_PACKET_SIZE);
 
-                    opcode_set(ACK, packet);
-                    block_number_set(out_block_number, packet);
-
-                    if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM, (struct sockaddr *)&client_address,
-                                client_address_size) < 0) {
-                        error_exit("Sendto failed on server side.");
-                    }
-
-                    memset(packet, 0, DEFAULT_PACKET_SIZE);
-                    packet_pos = 0;
-
+                    send_ack_packet(sock_fd, client_address, out_block_number);
                     if (last == true) {
                         fclose(file);
                         break;

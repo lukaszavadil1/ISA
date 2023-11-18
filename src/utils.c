@@ -88,11 +88,8 @@ void file_name_set(char *file_name, char *packet) {
 
 char *file_name_get(char *packet) {
     char *file_name = malloc(MAX_STR_LEN);
-    if (file_name == NULL) {
-        error_exit("File name malloc failed.");
-    }
     // Get file name from packet.
-    strcpy(file_name, packet_pos + packet);
+    file_name = packet_pos + packet;
     packet_pos += strlen(file_name) + 1;
     return file_name;
 }
@@ -114,11 +111,8 @@ void mode_set(int mode, char *packet) {
 
 char *mode_get(char *packet) {
     char *mode = malloc(MAX_STR_LEN);
-    if (mode == NULL) {
-        error_exit("Mode malloc failed.");
-    }
     // Get mode from packet.
-    strcpy(mode, packet_pos + packet);
+    mode = packet_pos + packet;
     packet_pos += strlen(mode) + 1;
     return mode;
 }
@@ -135,7 +129,7 @@ void block_number_set(int block_number, char *packet) {
 
 int block_number_get(char *packet) {
     int block_number;
-    // Copy block number from packet.
+    // Get block number from packet.
     memcpy(&block_number, packet + packet_pos, BLOCK_NUMBER_SIZE);
     // Convert block number to host byte order.
     block_number = ntohs(block_number);
@@ -143,50 +137,189 @@ int block_number_get(char *packet) {
     return block_number;
 }
 
-void data_set(char *data, char *packet) {
-    // Save data inside packet.
-    strcpy(packet + packet_pos, data);
-    packet_pos += strlen(data);
+void data_set(char *packet, FILE *file) {
+    int c;
+    while ((c = fgetc(file)) != EOF) {
+        packet[packet_pos++] = (char)c;
+        if (packet_pos == DEFAULT_PACKET_SIZE) {
+            break;
+        }
+    }
 }
 
 char *data_get(char *packet) {
-    char *data = malloc(DEFAULT_DATA_SIZE);
-    if (data == NULL) {
-        error_exit("Data malloc failed.");
-    }
-    // Get data from packet.
-    strcpy(data, packet + packet_pos);
-    packet_pos += strlen(data);
+    char *data = packet + packet_pos;
+    packet_pos += strnlen(data, DEFAULT_DATA_SIZE);
     return data;
+}
+
+void error_code_set(int error_code, char *packet) {
+    // Save error code inside packet in network byte order.
+    *(int *)(packet + packet_pos) = htons(error_code);
+    packet_pos += ERROR_CODE_SIZE;
+}
+
+int error_code_get(char *packet) {
+    int error_code;
+    // Get error code from packet.
+    memcpy(&error_code, packet + packet_pos, ERROR_CODE_SIZE);
+    // Convert error code to host byte order.
+    error_code = ntohs(error_code);
+    packet_pos += ERROR_CODE_SIZE;
+    return error_code;
+}
+
+void error_msg_set(char *error_message, char *packet) {
+    // Save error message inside packet.
+    strcpy(packet + packet_pos, error_message);
+    packet_pos += strlen(error_message);
+}
+
+char *error_msg_get(char *packet) {
+    char *error_msg = malloc(MAX_STR_LEN);
+    // Get error message from packet.
+    error_msg = packet + packet_pos;
+    packet_pos += strlen(error_msg);
+    return error_msg;
+}
+
+void option_set(int type, long int value, int order) {
+    options[type].flag = true;
+    options[type].value = value;
+    options[type].order = order;
+}
+
+int option_get_type(char *name) {
+    if (strcmp(name, TIMEOUT_NAME) == 0) {
+        return TIMEOUT;
+    }
+    else if (strcmp(name, TSIZE_NAME) == 0) {
+        return TSIZE;
+    }
+    else if (strcmp(name, BLKSIZE_NAME) == 0) {
+        return BLKSIZE;
+    }
+    else {
+        return -1;
+    }
+}
+
+long int option_get_value(int type) {
+    return options[type].value;
+}
+
+int option_get_order(int type) {
+    return options[type].order;
+}
+
+bool option_get_flag(int type) {
+    return options[type].flag;
+}
+
+char *option_get_name(int type) {
+    switch (type) {
+        case TIMEOUT:
+            return TIMEOUT_NAME;
+        case TSIZE:
+            return TSIZE_NAME;
+        case BLKSIZE:
+            return BLKSIZE_NAME;
+        default:
+            return NULL;
+    }
+}
+
+void options_load(char *packet) {
+    char *endptr = NULL;
+    char name[MAX_STR_LEN];
+    int type;
+    long int value;
+    static int order = 0;
+    while (packet[packet_pos] != '\0') {
+        strcpy(name, packet + packet_pos);
+        type = option_get_type(name);
+        if (type == -1) {
+            error_exit("Unsupported option.");
+        }
+        if (option_get_flag(type) == true) {
+            error_exit("Duplicate option.");
+        }
+        packet_pos += strlen(name) + 1;
+        value = strtol(packet + packet_pos, &endptr, 10);
+        if (*endptr != '\0') {
+            error_exit("Invalid option value.");
+        }
+        option_set(type, value, order++);
+        packet_pos += strlen(packet + packet_pos) + 1;
+    }
+}
+
+void options_set(char *packet) {
+    int order = 0;
+    for (int i = 0; i < NUM_OPTIONS; i++) {
+        if (option_get_flag(i) == true) {
+            if (option_get_order(i) == order) {
+                order++;
+                // Copy option name to packet.
+                strcpy(packet + packet_pos, option_get_name(i));
+                // Increment pointer position in packet.
+                packet_pos += strlen(option_get_name(i)) + 1;
+                // Copy option value to packet.
+                sprintf(packet + packet_pos, "%ld", option_get_value(i));
+                // Increment pointer position in packet.
+                packet_pos += strlen(packet + packet_pos) + 1;
+                i = -1;
+            }
+        }
+    }
 }
 
 void handle_request_packet(char *packet) {
     int opcode;
-    char *file_name = malloc(MAX_STR_LEN);
-    char *mode = malloc(MAX_STR_LEN);
-    if (file_name == NULL || mode == NULL) {
-        error_exit("File name or mode malloc failed.");
-    }
+    char file_name[MAX_STR_LEN];
+    char mode[MAX_STR_LEN];
 
     opcode = opcode_get(packet);
     if (opcode != RRQ && opcode != WRQ) {
         error_exit("Invalid opcode, server expected RRQ or WRQ.");
     }
-    file_name = file_name_get(packet);
+    strcpy(file_name, file_name_get(packet));
     if (strlen(file_name) == 0 || strlen(file_name) > MAX_STR_LEN) {
         error_exit("Invalid file name.");
     }
-    mode = mode_get(packet);
+    strcpy(mode, mode_get(packet));
     if (strcmp(mode, "octet") != 0 && strcmp(mode, "netascii") != 0) {
         error_exit("Unsupported mode.");
     }
     options_load(packet);
-    free(file_name);
-    free(mode);
+    if (packet_pos > DEFAULT_REQUEST_SIZE - 1) {
+        error_exit("Request packet too long.");
+    }
     packet_pos = 0;
 }
 
-void handle_ack(char *packet, int expected_block_number) {
+void send_request_packet(int socket, struct sockaddr_in dest_addr, int opcode, char *file_name) {
+    char packet[DEFAULT_PACKET_SIZE];
+    memset(packet, 0, DEFAULT_PACKET_SIZE);
+
+    // Set packet attributes.
+    opcode_set(opcode, packet);
+    file_name_set(file_name, packet);
+    empty_byte_insert(packet);
+    mode_set(OCTET, packet);
+    empty_byte_insert(packet);
+    // Set options.
+    option_set(BLKSIZE, 512, 1);
+    option_set(TIMEOUT, 1, 0);
+    options_set(packet);
+    
+    if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
+        error_exit("Sendto failed.");
+    }
+    packet_pos = 0;
+}
+
+void handle_ack_packet(char *packet, int expected_block_number) {
     int opcode, block_number;
 
     opcode = opcode_get(packet);
@@ -200,56 +333,6 @@ void handle_ack(char *packet, int expected_block_number) {
     packet_pos = 0;
 }
 
-bool handle_data(char *packet, int expected_block_number, FILE *file) {
-    int opcode, block_number;
-    char data[DEFAULT_DATA_SIZE];
-
-    opcode = opcode_get(packet);
-    if (opcode != DATA) {
-        error_exit("Invalid opcode, server expected DATA.");
-    }
-    block_number = block_number_get(packet);
-    if (block_number != expected_block_number) {
-        error_exit("Invalid data block number.");
-    }
-    strcpy(data, data_get(packet));
-    for (size_t i = 0; i < strlen(data); i++) {
-        fputc(data[i], file);
-    }
-    if (strlen(data) + 1 < DEFAULT_DATA_SIZE) {
-        return true;
-    }
-    return false;
-}
-
-bool send_data_packet(int socket, struct sockaddr_in dest_addr, int block_number, FILE *file) {
-    char packet[DEFAULT_PACKET_SIZE];
-    int c;
-    memset(packet, 0, DEFAULT_PACKET_SIZE);
-    packet_pos = 0;
-
-    opcode_set(DATA, packet);
-    block_number_set(block_number, packet);
-    while ((c = fgetc(file)) != EOF) {
-        //printf("Packet pos: %d\n", packet_pos);
-        packet[packet_pos++] = (char)c;
-        //printf("Packet char: %c\n", (char) c);
-        if (packet_pos == DEFAULT_PACKET_SIZE - 1) {
-            break;
-        }
-    }
-    packet[packet_pos] = '\0';
-    if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
-        error_exit("Sendto failed.");
-    }
-    if (packet_pos < DEFAULT_PACKET_SIZE - 1) {
-        packet_pos = 0;
-        return true;
-    }
-    packet_pos = 0;
-    return false;
-}
-
 void send_ack_packet(int socket, struct sockaddr_in dest_addr, int block_number) {
     char packet[DEFAULT_PACKET_SIZE];
     memset(packet, 0, DEFAULT_PACKET_SIZE);
@@ -260,6 +343,16 @@ void send_ack_packet(int socket, struct sockaddr_in dest_addr, int block_number)
 
     if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
         error_exit("Sendto failed.");
+    }
+    packet_pos = 0;
+}
+
+void handle_oack_packet(char *packet) {
+    int opcode;
+
+    opcode = opcode_get(packet);
+    if (opcode != OACK) {
+        error_exit("Invalid opcode, server expected OACK.");
     }
     packet_pos = 0;
 }
@@ -278,22 +371,61 @@ void send_oack_packet(int socket, struct sockaddr_in dest_addr) {
     packet_pos = 0;
 }
 
-void send_request_packet(int socket, struct sockaddr_in dest_addr, int opcode, char *file_name) {
+bool handle_data_packet(char *packet, int expected_block_number, FILE *file) {
+    int opcode, block_number;
+    char data[DEFAULT_DATA_SIZE];
+
+    opcode = opcode_get(packet);
+    if (opcode != DATA) {
+        error_exit("Invalid opcode, server expected DATA.");
+    }
+    block_number = block_number_get(packet);
+    if (block_number != expected_block_number) {
+        error_exit("Invalid data block number.");
+    }
+    memcpy(data, data_get(packet), DEFAULT_DATA_SIZE);
+    for (size_t i = 0; i < strnlen(data, DEFAULT_DATA_SIZE); i++) {
+        fputc(data[i], file);
+    }
+    if (strnlen(data, DEFAULT_DATA_SIZE) < DEFAULT_DATA_SIZE) {
+        packet_pos = 0;
+        return true;
+    }
+    packet_pos = 0;
+    return false;
+}
+
+bool send_data_packet(int socket, struct sockaddr_in dest_addr, int block_number, FILE *file) {
     char packet[DEFAULT_PACKET_SIZE];
     memset(packet, 0, DEFAULT_PACKET_SIZE);
 
-    opcode_set(opcode, packet);
-    file_name_set(file_name, packet);
-    empty_byte_insert(packet);
-    mode_set(OCTET, packet);
-    empty_byte_insert(packet);
-    option_set(BLKSIZE, 512, 1);
-    option_set(TIMEOUT, 1, 0);
-    options_set(packet);
+    opcode_set(DATA, packet);
+    block_number_set(block_number, packet);
+    data_set(packet, file);
     if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
         error_exit("Sendto failed.");
     }
+    if (packet_pos < DEFAULT_PACKET_SIZE) {
+        packet_pos = 0;
+        return true;
+    }
     packet_pos = 0;
+    return false;
+}
+
+void send_error_packet(int socket, struct sockaddr_in dest_addr, int error_code, char *error_message) {
+    char packet[DEFAULT_PACKET_SIZE];
+    memset(packet, 0, DEFAULT_PACKET_SIZE);
+    packet_pos = 0;
+
+    opcode_set(ERROR, packet);
+    error_code_set(error_code, packet);
+    error_msg_set(error_message, packet);
+    empty_byte_insert(packet);
+
+    if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
+        error_exit("Sendto failed.");
+    }
 }
 
 void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
@@ -354,151 +486,54 @@ void display_options(char *packet) {
     printf("\n");
 }
 
-void error_code_set(int error_code, char *packet) {
-    // Save error code in network byte order.
-    error_code = htons(error_code);
-    // Copy error code to packet.
-    memcpy(packet + packet_pos, &(error_code), 2);
-    // Increment pointer position in packet.
-    packet_pos += 2;
-}
+FILE *open_file(int socket, char *packet, char *dir_path, struct sockaddr_in addr) {
+    int opcode;
+    char file_name[MAX_STR_LEN];
+    char mode[MAX_STR_LEN];
+    char full_path[2*MAX_STR_LEN];
+    FILE *file = NULL;
+    opcode = opcode_get(packet);
+    strcpy(file_name, file_name_get(packet));
+    strcpy(mode, mode_get(packet));
+    strcpy(full_path, dir_path);
+    strcat(full_path, "/");
+    strcat(full_path, file_name);
 
-int error_code_get(char *packet) {
-    int error_code;
-    // Copy error code from packet.
-    memcpy(&error_code, packet + packet_pos, 2);
-    // Convert error code to host byte order.
-    error_code = ntohs(error_code);
-    // Increment pointer position in packet.
-    packet_pos += 2;
-    return error_code;
-}
-
-void error_msg_set(char *error_message, char *packet) {
-    // Copy error message to packet.
-    strcpy(packet + packet_pos, error_message);
-    // Increment pointer position in packet.
-    packet_pos += strlen(error_message);
-}
-
-char *error_msg_get(char *packet) {
-    char *error_message = malloc(MAX_STR_LEN);
-    if (error_message == NULL) {
-        error_exit("Error message malloc failed.");
+    if (opcode == WRQ) {
+        if (access(full_path, F_OK) != -1) {
+            send_error_packet(socket, addr, 6, "File already exists.");
+            exit(EXIT_FAILURE);
+        }
+        file = fopen(full_path, "w");
     }
-    // Copy error message from packet.
-    strcpy(error_message, packet + packet_pos);
-    // Increment pointer position in packet.
-    packet_pos += strlen(error_message);
-    return error_message;
-}
-
-void send_error_packet(int socket, struct sockaddr_in dest_addr, int error_code, char *error_message) {
-    char packet[DEFAULT_PACKET_SIZE];
-    memset(packet, 0, DEFAULT_PACKET_SIZE);
-    packet_pos = 0;
-
-    opcode_set(ERROR, packet);
-    error_code_set(error_code, packet);
-    error_msg_set(error_message, packet);
-    empty_byte_insert(packet);
-
-    if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
-        error_exit("Sendto failed.");
-    }
-}
-
-//Define functions for setting and getting options.
-void option_set(int type, long int value, int order) {
-    options[type].flag = true;
-    options[type].value = value;
-    options[type].order = order;
-}
-
-bool option_get_flag(int type) {
-    return options[type].flag;
-}
-
-int option_get_order(int type) {
-    return options[type].order;
-}
-
-long int option_get_value(int type) {
-    return options[type].value;
-}
-
-//Define functions for setting and getting option names and types.
-char *option_get_name(int type) {
-    switch (type) {
-        case TIMEOUT:
-            return TIMEOUT_NAME;
-        case TSIZE:
-            return TSIZE_NAME;
-        case BLKSIZE:
-            return BLKSIZE_NAME;
-        default:
-            return NULL;
-    }
-}
-
-int option_get_type(char *name) {
-    if (strcmp(name, TIMEOUT_NAME) == 0) {
-        return TIMEOUT;
-    }
-    else if (strcmp(name, TSIZE_NAME) == 0) {
-        return TSIZE;
-    }
-    else if (strcmp(name, BLKSIZE_NAME) == 0) {
-        return BLKSIZE;
+    else if (opcode == RRQ) {
+        if (strcmp(mode, "netascii") == 0) {
+            file = fopen(full_path, "r");
+        }
+        else if (strcmp(mode, "octet") == 0) {
+            file = fopen(full_path, "rb");
+        }
+        else {
+            send_error_packet(socket, addr, 4, "Illegal TFTP operation.");
+            exit(EXIT_FAILURE);
+        }
     }
     else {
-        return -1;
+        send_error_packet(socket, addr, 4, "Illegal TFTP operation.");
+        exit(EXIT_FAILURE);
     }
+    if (file == NULL) {
+        send_error_packet(socket, addr, 1, "File not found.");
+        exit(EXIT_FAILURE);
+    }
+    packet_pos = 0;
+    return file;
 }
 
-void options_set(char *packet) {
-    int order = 0;
-    for (int i = 0; i < NUM_OPTIONS; i++) {
-        if (option_get_flag(i) == true) {
-            if (option_get_order(i) == order) {
-                order++;
-                // Copy option name to packet.
-                strcpy(packet + packet_pos, option_get_name(i));
-                // Increment pointer position in packet.
-                packet_pos += strlen(option_get_name(i)) + 1;
-                // Copy option value to packet.
-                sprintf(packet + packet_pos, "%ld", option_get_value(i));
-                // Increment pointer position in packet.
-                packet_pos += strlen(packet + packet_pos) + 1;
-                i = -1;
-            }
-        }
-    }
+// Mention in docs: https://stackoverflow.com/questions/59658328/implicit-declaration-of-strnlen-in-freertos
+size_t strnlen(const char *s, size_t maxlen) {
+    size_t len = 0;
+    if(s)
+        for(char c = *s; (len < maxlen && c != '\0'); c = *++s) len++;
+    return len;
 }
-
-void options_load(char *packet) {
-    char *endptr = NULL;
-    char name[MAX_STR_LEN];
-    int type;
-    long int value;
-    static int order = 0;
-    while (packet[packet_pos] != '\0') {
-        strcpy(name, packet + packet_pos);
-        type = option_get_type(name);
-        if (type == -1) {
-            error_exit("Unsupported option.");
-        }
-        if (option_get_flag(type) == true) {
-            error_exit("Duplicate option.");
-        }
-        packet_pos += strlen(name) + 1;
-        value = strtol(packet + packet_pos, &endptr, 10);
-        if (*endptr != '\0') {
-            error_exit("Invalid option value.");
-        }
-        option_set(type, value, order++);
-        packet_pos += strlen(packet + packet_pos) + 1;
-    }
-}
-
-FILE *open_file(char *packet, char *dir_path, struct sockaddr_in addr);

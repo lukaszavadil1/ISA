@@ -21,12 +21,14 @@ typedef struct ClientArgs {
     char *dest_file_path;
 } ClientArgs_t;
 
+int opcode;
+int out_block_number;
 FILE *file;
 
 /**
 * @brief Initialize ClientArgs_t struct.
 *
-* @param client_args Pointer to ClientArgs_t struct.
+* @param client_args Pointer to struct for storing client's command line arguments.
 *
 * @return void
 */
@@ -35,7 +37,7 @@ void init_args(ClientArgs_t *client_args);
 /**
 * @brief Deallocate memory allocated for ClientArgs_t struct.
 *
-* @param client_args Pointer to ClientArgs_t struct.
+* @param client_args Pointer to struct for storing client's command line arguments.
 *
 */
 void free_args(ClientArgs_t *client_args);
@@ -45,10 +47,19 @@ void free_args(ClientArgs_t *client_args);
 *
 * @param argc Number of command line arguments.
 * @param argv Command line arguments array.
-* @param client_args Pointer to ClientArgs_t struct.
+* @param client_args Pointer to struct for storing client's command line arguments.
 *
 * @return void
 */
 void parse_args(int argc, char *argv[], ClientArgs_t *client_args, int *opcode);
+
+/**
+* @brief Handle client's data stream.
+*
+* @param opcode Packet's opcode.
+*
+* @return FILE* Pointer to file stream.
+*/
+FILE *client_data_stream(int opcode, ClientArgs_t *client_args);
 
 #endif // TFTP_CLIENT_H
