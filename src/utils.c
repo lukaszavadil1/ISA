@@ -82,12 +82,15 @@ int opcode_get(char *packet) {
 
 void file_name_set(char *file_name, char *packet) {
     // Save file name inside packet.
-    strcpy(packet_pos + packet, file_name);
-    packet_pos += strlen(file_name);
+    if (strlen(file_name) > MAX_FILE_NAME_LEN - 1) {
+        error_exit("File name too long.");
+    }
+    strncpy(packet_pos + packet, file_name, MAX_FILE_NAME_LEN);
+    packet_pos += strnlen(file_name, MAX_FILE_NAME_LEN);
 }
 
 char *file_name_get(char *packet) {
-    char *file_name = malloc(MAX_STR_LEN);
+    char *file_name = calloc(MAX_FILE_NAME_LEN, sizeof(char));
     // Get file name from packet.
     file_name = packet_pos + packet;
     packet_pos += strlen(file_name) + 1;
@@ -110,7 +113,7 @@ void mode_set(int mode, char *packet) {
 }
 
 char *mode_get(char *packet) {
-    char *mode = malloc(MAX_STR_LEN);
+    char *mode = calloc(MAX_MODE_LEN, sizeof(char));
     // Get mode from packet.
     mode = packet_pos + packet;
     packet_pos += strlen(mode) + 1;
@@ -141,7 +144,7 @@ void data_set(char *packet, FILE *file) {
     int c;
     while ((c = fgetc(file)) != EOF) {
         packet[packet_pos++] = (char)c;
-        if (packet_pos == DEFAULT_PACKET_SIZE) {
+        if (packet_pos == options[BLKSIZE].value + 4) {
             break;
         }
     }
@@ -149,7 +152,7 @@ void data_set(char *packet, FILE *file) {
 
 char *data_get(char *packet) {
     char *data = packet + packet_pos;
-    packet_pos += strnlen(data, DEFAULT_DATA_SIZE);
+    packet_pos += strnlen(data, options[BLKSIZE].value + 4);
     return data;
 }
 
@@ -184,6 +187,25 @@ char *error_msg_get(char *packet) {
 }
 
 void option_set(int type, long int value, int order) {
+    switch (type) {
+        case TIMEOUT:
+            if (value < 1 || value > 255) {
+                error_exit("Invalid timeout value.");
+            }
+            break;
+        case TSIZE:
+            if (value < 0 || value > 428998656) {
+                error_exit("Invalid tsize value.");
+            }
+            break;
+        case BLKSIZE:
+            if (value < 8 || value > 65464) {
+                error_exit("Invalid blksize value.");
+            }
+            break;
+        default:
+            error_exit("Invalid option type.");
+    }
     options[type].flag = true;
     options[type].value = value;
     options[type].order = order;
@@ -235,8 +257,11 @@ void options_load(char *packet) {
     int type;
     long int value;
     static int order = 0;
+    options[TIMEOUT] = (Option_t){false, 0, -1};
+    options[TSIZE] = (Option_t){false, 0, -1};
+    options[BLKSIZE] = (Option_t){false, 0, -1};
     while (packet[packet_pos] != '\0') {
-        strcpy(name, packet + packet_pos);
+        strncpy(name, packet + packet_pos, MAX_STR_LEN - 1);
         type = option_get_type(name);
         if (type == -1) {
             error_exit("Unsupported option.");
@@ -244,7 +269,7 @@ void options_load(char *packet) {
         if (option_get_flag(type) == true) {
             error_exit("Duplicate option.");
         }
-        packet_pos += strlen(name) + 1;
+        packet_pos += strnlen(name, MAX_STR_LEN) + 1;
         value = strtol(packet + packet_pos, &endptr, 10);
         if (*endptr != '\0') {
             error_exit("Invalid option value.");
@@ -276,41 +301,43 @@ void options_set(char *packet) {
 
 void handle_request_packet(char *packet) {
     int opcode;
-    char file_name[MAX_STR_LEN];
-    char mode[MAX_STR_LEN];
+    char file_name[MAX_FILE_NAME_LEN + 1];
+    char mode[MAX_MODE_LEN + 1];
 
     opcode = opcode_get(packet);
     if (opcode != RRQ && opcode != WRQ) {
         error_exit("Invalid opcode, server expected RRQ or WRQ.");
     }
-    strcpy(file_name, file_name_get(packet));
-    if (strlen(file_name) == 0 || strlen(file_name) > MAX_STR_LEN) {
-        error_exit("Invalid file name.");
+    
+    strncpy(file_name, file_name_get(packet), MAX_FILE_NAME_LEN);
+    if (strlen(file_name) == 0) {
+        error_exit("File name cannot be empty.");
     }
-    strcpy(mode, mode_get(packet));
+    strncpy(mode, mode_get(packet), MAX_MODE_LEN);
     if (strcmp(mode, "octet") != 0 && strcmp(mode, "netascii") != 0) {
         error_exit("Unsupported mode.");
     }
     options_load(packet);
-    if (packet_pos > DEFAULT_REQUEST_SIZE - 1) {
+    if (packet_pos == REQUEST_PACKET_SIZE) {
         error_exit("Request packet too long.");
     }
     packet_pos = 0;
 }
 
 void send_request_packet(int socket, struct sockaddr_in dest_addr, int opcode, char *file_name) {
-    char packet[DEFAULT_PACKET_SIZE];
-    memset(packet, 0, DEFAULT_PACKET_SIZE);
+    char packet[REQUEST_PACKET_SIZE];
+    memset(packet, 0, REQUEST_PACKET_SIZE);
 
     // Set packet attributes.
     opcode_set(opcode, packet);
     file_name_set(file_name, packet);
     empty_byte_insert(packet);
+    // Octet mode is default.
     mode_set(OCTET, packet);
     empty_byte_insert(packet);
     // Set options.
-    option_set(BLKSIZE, 512, 1);
-    option_set(TIMEOUT, 1, 0);
+    option_set(BLKSIZE, 80, 1);
+    option_set(TIMEOUT, 5, 0);
     options_set(packet);
     
     if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
@@ -373,7 +400,7 @@ void send_oack_packet(int socket, struct sockaddr_in dest_addr) {
 
 bool handle_data_packet(char *packet, int expected_block_number, FILE *file) {
     int opcode, block_number;
-    char data[DEFAULT_DATA_SIZE];
+    char data[options[BLKSIZE].value];
 
     opcode = opcode_get(packet);
     if (opcode != DATA) {
@@ -383,11 +410,11 @@ bool handle_data_packet(char *packet, int expected_block_number, FILE *file) {
     if (block_number != expected_block_number) {
         error_exit("Invalid data block number.");
     }
-    memcpy(data, data_get(packet), DEFAULT_DATA_SIZE);
-    for (size_t i = 0; i < strnlen(data, DEFAULT_DATA_SIZE); i++) {
+    memcpy(data, data_get(packet), options[BLKSIZE].value + 4);
+    for (size_t i = 0; i < strnlen(data, options[BLKSIZE].value + 4); i++) {
         fputc(data[i], file);
     }
-    if (strnlen(data, DEFAULT_DATA_SIZE) < DEFAULT_DATA_SIZE) {
+    if (strnlen(data, options[BLKSIZE].value) < (long unsigned int)options[BLKSIZE].value) {
         packet_pos = 0;
         return true;
     }
@@ -396,16 +423,16 @@ bool handle_data_packet(char *packet, int expected_block_number, FILE *file) {
 }
 
 bool send_data_packet(int socket, struct sockaddr_in dest_addr, int block_number, FILE *file) {
-    char packet[DEFAULT_PACKET_SIZE];
-    memset(packet, 0, DEFAULT_PACKET_SIZE);
+    char packet[options[BLKSIZE].value + 4];
+    memset(packet, 0, options[BLKSIZE].value + 4);
 
     opcode_set(DATA, packet);
     block_number_set(block_number, packet);
     data_set(packet, file);
-    if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
+    if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, (socklen_t)sizeof(dest_addr)) < 0) {
         error_exit("Sendto failed.");
     }
-    if (packet_pos < DEFAULT_PACKET_SIZE) {
+    if (packet_pos < options[BLKSIZE].value + 4) {
         packet_pos = 0;
         return true;
     }
@@ -488,14 +515,14 @@ void display_options(char *packet) {
 
 FILE *open_file(int socket, char *packet, char *dir_path, struct sockaddr_in addr) {
     int opcode;
-    char file_name[MAX_STR_LEN];
-    char mode[MAX_STR_LEN];
-    char full_path[2*MAX_STR_LEN];
+    char file_name[MAX_FILE_NAME_LEN + 1];
+    char mode[MAX_MODE_LEN + 1];
+    char full_path[MAX_FILE_NAME_LEN + MAX_DIR_PATH_LEN + 2];
     FILE *file = NULL;
     opcode = opcode_get(packet);
-    strcpy(file_name, file_name_get(packet));
-    strcpy(mode, mode_get(packet));
-    strcpy(full_path, dir_path);
+    strncpy(file_name, file_name_get(packet), MAX_FILE_NAME_LEN);
+    strncpy(mode, mode_get(packet), MAX_MODE_LEN);
+    strncpy(full_path, dir_path, MAX_DIR_PATH_LEN);
     strcat(full_path, "/");
     strcat(full_path, file_name);
 

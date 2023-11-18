@@ -142,8 +142,8 @@ int main(int argc, char *argv[]) {
 void init_args(ClientArgs_t *client_args) {
     client_args->host_name = calloc(MAX_STR_LEN, sizeof(char));
     client_args->port = DEFAULT_PORT_NUM;
-    client_args->file_path = calloc(MAX_STR_LEN, sizeof(char));
-    client_args->dest_file_path = calloc(MAX_STR_LEN, sizeof(char));
+    client_args->file_path = calloc(MAX_FILE_NAME_LEN, sizeof(char));
+    client_args->dest_file_path = calloc(MAX_FILE_NAME_LEN, sizeof(char));
     if (client_args->host_name == NULL || client_args->file_path == NULL || client_args->dest_file_path == NULL) {
         error_exit("Client args member malloc failed.");
     }

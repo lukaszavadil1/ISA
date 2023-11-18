@@ -24,7 +24,10 @@
 
 #define MAX_STR_LEN 256
 #define DEFAULT_DATA_SIZE 512
-#define DEFAULT_REQUEST_SIZE 512
+#define REQUEST_PACKET_SIZE 512
+#define MAX_FILE_NAME_LEN 256
+#define MAX_MODE_LEN 8
+#define MAX_DIR_PATH_LEN 128
 #define DEFAULT_PACKET_SIZE 516
 
 // Default port number for TFTP.
@@ -58,6 +61,9 @@
 #define TSIZE_NAME "tsize"
 #define BLKSIZE_NAME "blksize"
 #define NUM_OPTIONS 3
+
+// Theoretical max file size.
+//long int maxFileSize = 65536 * (65464 - OPCODE_SIZE - BLOCK_NUMBER_SIZE);
 
 // Error codes.
 #define ERR_NOT_DEFINED 0
@@ -348,6 +354,13 @@ void options_load(char *packet);
 * @return void
 */
 void options_set(char *packet);
+
+/**
+* @brief Apply options.
+*
+* @return void
+*/
+void options_apply();
 
 /**
 * @brief Handle request packet.

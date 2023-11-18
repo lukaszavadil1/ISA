@@ -57,11 +57,11 @@ int main(int argc, char *argv[]) {
         // Handle SIGINT signal.
         signal(SIGINT, sigint_handler);
 
-        memset(packet, 0, DEFAULT_PACKET_SIZE);
+        memset(packet, 0, REQUEST_PACKET_SIZE);
         packet_pos = 0;
 
         // Listen for incoming request packets.
-        if ((recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+        if ((recvfrom(sock_fd, (char *)packet, REQUEST_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                       (socklen_t *) &client_address_size)) < 0) {
             error_exit("Recvfrom failed on server side.");
         }
@@ -91,30 +91,27 @@ int main(int argc, char *argv[]) {
             display_message(sock_fd, client_address, packet); 
 
             file = open_file(sock_fd, packet, server_args->dir_path, client_address);
-
             opcode = opcode_get(packet);
-
             if (opcode == RRQ) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     send_oack_packet(sock_fd, client_address);
-                    if (recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+                    if (recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size) < 0) {
                         error_exit("Recvfrom failed on server side.");
                     }
-                    
                     handle_ack_packet(packet, 0);
                     display_message(sock_fd, client_address, packet);
-
-                    memset(packet, 0, DEFAULT_PACKET_SIZE);
                 }
                 while(true) {
+                    memset(packet, 0, options[BLKSIZE].value + 4);
                     last = send_data_packet(sock_fd, client_address, ++out_block_number, file);
-                    if (recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+                    if (recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size) < 0) {
                         error_exit("Recvfrom failed on server side.");
                     }
                     handle_ack_packet(packet, out_block_number);
                     display_message(sock_fd, client_address, packet);
+
                     if (last == true) {
                         fclose(file);
                         break;
@@ -129,14 +126,14 @@ int main(int argc, char *argv[]) {
                     send_ack_packet(sock_fd, client_address, 0);
                 }
                 while (true) {
-                    memset(packet, 0, DEFAULT_PACKET_SIZE);
-                    if (recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+                    memset(packet, 0, options[BLKSIZE].value + 4);
+                    if (recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size) < 0) {
                         error_exit("Recvfrom failed on server side.");
                     }
                     last = handle_data_packet(packet, ++out_block_number, file);
                     display_message(sock_fd, client_address, packet);
-                    memset(packet, 0, DEFAULT_PACKET_SIZE);
+                    memset(packet, 0, options[BLKSIZE].value + 4);
 
                     send_ack_packet(sock_fd, client_address, out_block_number);
                     if (last == true) {
