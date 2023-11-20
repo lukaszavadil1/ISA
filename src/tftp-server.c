@@ -39,12 +39,12 @@ int main(int argc, char *argv[]) {
     // Parse command line arguments.
     parse_args(argc, argv, server_args);
 
-    int sock_fd = init_socket(server_args->port, &server_addr);
+    int socket = init_socket(server_args->port, &server_addr);
 
     // Bind server to all interfaces.
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if (bind(sock_fd, (const struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+    if (bind(socket, (const struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         error_exit("Bind failed.");
     }
 
@@ -60,8 +60,10 @@ int main(int argc, char *argv[]) {
         packet_pos = 0;
 
         // Listen for incoming request packets.
-        if ((recvfrom(sock_fd, (char *)packet, REQUEST_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
+        if ((recvfrom(socket, (char *)packet, REQUEST_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&client_address,
                       (socklen_t *) &client_address_size)) < 0) {
+            printf("errno: %d\n", errno);
+            printf("error: %s\n", strerror(errno));
             error_exit("Recvfrom failed on server side.");
         }
 
@@ -74,6 +76,16 @@ int main(int argc, char *argv[]) {
             int opcode;
             int out_block_number = 0;
             int recvfrom_size;
+            int sock_fd;
+            options[TIMEOUT].flag = false;
+            options[TSIZE].flag = false;
+            options[BLKSIZE].flag = false;
+            options[TIMEOUT].value = 0;
+            options[TSIZE].value = 0;
+            options[BLKSIZE].value = 512;
+            options[TIMEOUT].order = -1;
+            options[TSIZE].order = -1;
+            options[BLKSIZE].order = -1;
 
             // Pointer to the current position in packet.
             packet_pos = 0;
@@ -92,14 +104,28 @@ int main(int argc, char *argv[]) {
 
             file = open_file(sock_fd, packet, server_args->dir_path, client_address);
             opcode = opcode_get(packet);
+            packet_pos = 0;
             if (opcode == RRQ) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     send_oack_packet(sock_fd, client_address);
                     if (recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&client_address, (socklen_t *) &client_address_size) < 0) {
                         send_error_packet(sock_fd, client_address, 0, "Recvfrom failed on server side.");
                     }
-                    handle_ack_packet(packet, 0);
-                    display_message(sock_fd, client_address, packet);
+                    opcode = opcode_get(packet);
+                    packet_pos = 0;
+                    switch (opcode) {
+                        case ACK:
+                            handle_ack_packet(packet, 0);
+                            display_message(sock_fd, client_address, packet);
+                            break;
+                        case ERROR:
+                            display_message(sock_fd, client_address, packet);
+                            fclose(file);
+                            error_exit("Client error.");
+                            break;
+                        default:
+                            send_error_packet(sock_fd, client_address, ERR_ILLEGAL_OPERATION, "Expected ACK or ERROR.");
+                    }
                 }
                 packet = realloc(packet, options[BLKSIZE].value + 4);
                 while(true) {
@@ -109,9 +135,21 @@ int main(int argc, char *argv[]) {
                                 (socklen_t *) &client_address_size) < 0) {
                         send_error_packet(sock_fd, client_address, 0, "Recvfrom failed on server side.");
                     }
-                    handle_ack_packet(packet, out_block_number);
-                    display_message(sock_fd, client_address, packet);
-
+                    opcode = opcode_get(packet);
+                    packet_pos = 0;
+                    switch (opcode) {
+                        case ACK:
+                            handle_ack_packet(packet, out_block_number);
+                            display_message(sock_fd, client_address, packet);
+                            break;
+                        case ERROR:
+                            display_message(sock_fd, client_address, packet);
+                            fclose(file);
+                            error_exit("Client error.");
+                            break;
+                        default:
+                            error_exit("Invalid opcode.");
+                    }                    
                     if (last == true) {
                         fclose(file);
                         break;
@@ -130,12 +168,24 @@ int main(int argc, char *argv[]) {
                     memset(packet, 0, options[BLKSIZE].value + 4);
                     if ((recvfrom_size = recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size)) < 0) {
-                        fclose(file);
                         send_error_packet(sock_fd, client_address, 0, "Recvfrom failed on server side.");
                     }
-                    handle_data_packet(packet, ++out_block_number, file, recvfrom_size);
-                    display_message(sock_fd, client_address, packet);
-                    memset(packet, 0, options[BLKSIZE].value + 4);
+                    opcode = opcode_get(packet);
+                    packet_pos = 0;
+                    switch (opcode) {
+                        case DATA:
+                            handle_data_packet(packet, ++out_block_number, file, recvfrom_size);
+                            display_message(sock_fd, client_address, packet);
+                            memset(packet, 0, options[BLKSIZE].value + 4);
+                            break;
+                        case ERROR:
+                            display_message(sock_fd, client_address, packet);
+                            fclose(file);
+                            error_exit("Client error.");
+                            break;
+                        default:
+                            send_error_packet(sock_fd, client_address, ERR_ILLEGAL_OPERATION, "Expected DATA or ERROR.");
+                    }
 
                     send_ack_packet(sock_fd, client_address, out_block_number);
                     if (recvfrom_size < options[BLKSIZE].value + 4) {
@@ -145,13 +195,12 @@ int main(int argc, char *argv[]) {
                 }
             }
             else {
-                send_error_packet(sock_fd, client_address, 4, "Expected RRQ or WRQ.");
+                send_error_packet(sock_fd, client_address, ERR_ILLEGAL_OPERATION, "Expected RRQ or WRQ.");
                 exit(EXIT_FAILURE);
             }
             shutdown(sock_fd, SHUT_RDWR);
             close(sock_fd);
         }
-
     }
 }
 

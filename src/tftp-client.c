@@ -111,7 +111,6 @@ int main(int argc, char *argv[]) {
                 error_exit("Invalid opcode.");
         }
         display_message(sock_fd, server_address, packet);
-
         while(true) {
             memset(packet, 0, options[BLKSIZE].value + 4);
             last = send_data_packet(sock_fd, server_address, ++out_block_number, file);
@@ -119,9 +118,20 @@ int main(int argc, char *argv[]) {
             if (recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
                 error_exit("Recvfrom failed on client side.");
             }
-            handle_ack_packet(packet, out_block_number);
-            display_message(sock_fd, server_address, packet);
-
+            opcode = opcode_get(packet);
+            packet_pos = 0;
+            switch (opcode) {
+                case ACK:
+                    handle_ack_packet(packet, out_block_number);
+                    display_message(sock_fd, server_address, packet);
+                    break;
+                case ERROR:
+                    display_message(sock_fd, server_address, packet);
+                    fclose(file);
+                    exit(EXIT_FAILURE);
+                default:
+                    error_exit("Invalid opcode.");
+            }
             if (last == true) {
                 fclose(file);
                 break;
@@ -131,6 +141,8 @@ int main(int argc, char *argv[]) {
     else {
         error_exit("Invalid request.");
     }
+    shutdown(sock_fd, SHUT_RDWR);
+    close(sock_fd);
     return EXIT_SUCCESS;
 }
 

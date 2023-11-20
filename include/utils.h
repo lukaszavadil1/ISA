@@ -23,6 +23,7 @@
 #include <dirent.h>
 #include <sys/vfs.h>
 #include <sys/stat.h>
+#include <ctype.h>
 
 #define MAX_STR_LEN 256
 #define DEFAULT_DATA_SIZE 512
@@ -496,8 +497,10 @@ FILE *open_file(int socket, char *packet, char *dir_path, struct sockaddr_in sou
 */
 size_t strnlen(const char *s, size_t maxlen);
 
-long get_free_space(char *path);
+long check_memory(char *dir_path);
 
 long check_file_size(char * file_name);
+
+void string_to_lower(char *str);
 
 #endif // UTILS_H

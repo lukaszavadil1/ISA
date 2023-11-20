@@ -23,4 +23,4 @@ obj/%.o: src/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(CLIENT_BIN) $(SERVER_BIN) $(CLIENT_OBJ) $(SERVER_OBJ) $(UTILS_OBJ) $(ROOT_DIR) $(CLIENT_DIR)
+	rm -f $(CLIENT_BIN) $(SERVER_BIN) $(CLIENT_OBJ) $(SERVER_OBJ) $(UTILS_OBJ)

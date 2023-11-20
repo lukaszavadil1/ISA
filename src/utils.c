@@ -15,7 +15,7 @@ bool last = false;
 Option_t options[NUM_OPTIONS];
 
 void error_exit(const char *message) {
-    (errno == 0) ? fprintf(stderr, "Error: %s\n", message) : fprintf(stderr, "Error: %s (%s)\n", message, strerror(errno));
+    (errno == 0) ? fprintf(stdout, "Error: %s\n", message) : fprintf(stdout, "Error: %s (%s)\n", message, strerror(errno));
     exit(EXIT_FAILURE);
 }
 
@@ -116,6 +116,7 @@ char *mode_get(char *packet) {
     char *mode = calloc(MAX_MODE_LEN, sizeof(char));
     // Get mode from packet.
     mode = packet_pos + packet;
+    string_to_lower(mode);
     packet_pos += strlen(mode) + 1;
     return mode;
 }
@@ -262,6 +263,7 @@ void options_load(char *packet, int opcode) {
     static int order = 0;
     while (packet[packet_pos] != '\0') {
         strncpy(name, packet + packet_pos, MAX_STR_LEN - 1);
+        string_to_lower(name);
         type = option_get_type(name);
         if (type == -1) {
             error_exit("Unsupported option.");
@@ -356,12 +358,21 @@ void send_request_packet(int socket, struct sockaddr_in dest_addr, int opcode, c
     // Octet mode is default.
     mode_set(OCTET, packet);
     empty_byte_insert(packet);
+    options[TIMEOUT].flag = false;
+    options[TSIZE].flag = false;
+    options[BLKSIZE].flag = false;
+    options[TIMEOUT].value = 0;
+    options[TSIZE].value = 0;
+    options[BLKSIZE].value = 512;
+    options[TIMEOUT].order = -1;
+    options[TSIZE].order = -1;
+    options[BLKSIZE].order = -1;
     // Set options.
     // Remove after testing.
-    option_set(TSIZE, 0, 2, 0);
-    option_set(TIMEOUT, 5, 0, 0);
-    option_set(BLKSIZE, 1024, 1, 0);
-    options_set(packet);
+    // option_set(TSIZE, 0, 2, 0);
+    // option_set(TIMEOUT, 5, 0, 0);
+    // option_set(BLKSIZE, 60000, 1, 0);
+    // options_set(packet);
     // Remove after testing.
     
     if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
@@ -444,7 +455,6 @@ void handle_data_packet(char *packet, int expected_block_number, FILE *file, int
 bool send_data_packet(int socket, struct sockaddr_in dest_addr, int block_number, FILE *file) {
     char packet[options[BLKSIZE].value + 4];
     memset(packet, 0, options[BLKSIZE].value + 4);
-
     opcode_set(DATA, packet);
     block_number_set(block_number, packet);
     data_set(packet, file);
@@ -472,6 +482,7 @@ void send_error_packet(int socket, struct sockaddr_in dest_addr, int error_code,
     if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
         error_exit("Sendto failed.");
     }
+    error_exit(error_message);
 }
 
 void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
@@ -492,7 +503,7 @@ void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
     char *file_name = NULL;
     int error_code;
     char *error_msg = NULL;
-
+    
     switch (opcode) {
         case RRQ:
         case WRQ:
@@ -519,7 +530,7 @@ void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
             display_options(packet);
             break;
         default:
-            error_exit("Invalid opcode.");
+            send_error_packet(socket, source_addr, ERR_ILLEGAL_OPERATION, "Illegal TFTP operation.");
     }
     packet_pos = 0;
 }
@@ -618,4 +629,10 @@ long check_file_size(char *file_name) {
         return -1;
     }
     return status.st_size;
+}
+
+void string_to_lower(char *str) {
+    for(int i = 0; str[i]; i++){
+        str[i] = tolower(str[i]);
+    }
 }
