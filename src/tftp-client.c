@@ -1,7 +1,7 @@
 //
 // File: tftp-client.c
 //
-// Author: Lukáš Zavadil
+// Author: Lukáš Zavadil (xzavad20)
 //
 // Description: Implementation of TFTP client.
 //
@@ -30,6 +30,7 @@ int main(int argc, char *argv[]) {
     out_block_number = 0;
     packet_pos = 0;
     last = false;
+    int recvfrom_size;
 
     // Initialize client arguments structure and its members.
     ClientArgs_t *client_args;
@@ -53,42 +54,35 @@ int main(int argc, char *argv[]) {
 
     if (opcode == RRQ) {
         send_request_packet(sock_fd, server_address, RRQ, client_args->file_path);
+        packet = realloc(packet, options[BLKSIZE].value + 4);
         while (true) {
-            if (recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
+            memset(packet, 0, options[BLKSIZE].value + 4);
+            if ((recvfrom_size = recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size)) < 0) {
                 error_exit("Recvfrom failed on client side.");
             }
             opcode = opcode_get(packet);
             packet_pos = 0;
             switch(opcode) {
                 case DATA:
-                    last = handle_data_packet(packet, ++out_block_number, file);
-                    display_message(sock_fd, server_address, packet);
-                    memset(packet, 0, DEFAULT_PACKET_SIZE);
+                    handle_data_packet(packet, ++out_block_number, file, recvfrom_size);
                     break;
                 case ERROR:
                     display_message(sock_fd, server_address, packet);
                     fclose(file);
                     exit(EXIT_FAILURE);
                 case OACK:
-                    display_message(sock_fd, server_address, packet);
-                    memset(packet, 0, DEFAULT_PACKET_SIZE);
+                    handle_oack_packet(packet);
+                    recvfrom_size = options[BLKSIZE].value + 4;
                     break;
                 default:
                     error_exit("Invalid opcode.");
             }
+            display_message(sock_fd, server_address, packet);
+            memset(packet, 0, options[BLKSIZE].value + 4);
 
-            opcode_set(ACK, packet);
-            block_number_set(out_block_number, packet);
+            send_ack_packet(sock_fd, server_address, out_block_number);
 
-            if (sendto(sock_fd, packet, packet_pos, MSG_CONFIRM,
-                       (const struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
-                error_exit("Sendto failed on client side.");
-            }
-
-            memset(packet, 0, DEFAULT_PACKET_SIZE);
-            packet_pos = 0;
-
-            if (last == true) {
+            if (recvfrom_size < options[BLKSIZE].value + 4) {
                 fclose(file);
                 break;
             }
@@ -96,7 +90,8 @@ int main(int argc, char *argv[]) {
     }
     else if (opcode == WRQ) {
         send_request_packet(sock_fd, server_address, WRQ, client_args->dest_file_path);
-        if (recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
+        packet = realloc(packet, options[BLKSIZE].value + 4);
+        if (recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
             error_exit("Recvfrom failed on client side.");
         }
         opcode = opcode_get(packet);
@@ -118,11 +113,12 @@ int main(int argc, char *argv[]) {
         display_message(sock_fd, server_address, packet);
 
         while(true) {
+            memset(packet, 0, options[BLKSIZE].value + 4);
             last = send_data_packet(sock_fd, server_address, ++out_block_number, file);
-            if (recvfrom(sock_fd, (char *)packet, DEFAULT_PACKET_SIZE, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
+            memset(packet, 0, options[BLKSIZE].value + 4);
+            if (recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&server_address, (socklen_t *)&server_address_size) < 0) {
                 error_exit("Recvfrom failed on client side.");
             }
-
             handle_ack_packet(packet, out_block_number);
             display_message(sock_fd, server_address, packet);
 

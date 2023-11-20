@@ -1,7 +1,7 @@
 //
 // File: utils.h
 //
-// Author: Lukáš Zavadil
+// Author: Lukáš Zavadil (xzavad20)
 //
 // Description: Header file for helper functions.
 //
@@ -21,6 +21,8 @@
 #include <unistd.h>
 #include <signal.h>
 #include <dirent.h>
+#include <sys/vfs.h>
+#include <sys/stat.h>
 
 #define MAX_STR_LEN 256
 #define DEFAULT_DATA_SIZE 512
@@ -241,7 +243,7 @@ void data_set(char *packet, FILE *file);
 *
 * @return Packet's data.
 */
-char *data_get(char *packet);
+char *data_get(char *packet, int recvfrom_size);
 
 /**
 * @brief Set packet's error code.
@@ -287,10 +289,11 @@ char *error_msg_get(char *packet);
 * @param type Option type.
 * @param value Option value.
 * @param order Option order.
+* @param opcode Opcode.
 *
 * @return void
 */
-void option_set(int type, long int value, int order);
+void option_set(int type, long int value, int order, int opcode);
 
 /**
 * @brief Get packet option's type.
@@ -344,7 +347,7 @@ char *option_get_name(int type);
 *
 * @return void
 */
-void options_load(char *packet);
+void options_load(char *packet, int opcode);
 
 /**
 * @brief Set options in packet.
@@ -425,7 +428,7 @@ void send_oack_packet(int socket, struct sockaddr_in dest_addr);
 *
 * @return True if last packet, false otherwise.
 */
-bool handle_data_packet(char *packet, int expected_block_number, FILE *file);
+void handle_data_packet(char *packet, int expected_block_number, FILE *file, int recvfrom_size);
 
 /**
 * @brief Send data packet.
@@ -492,5 +495,9 @@ FILE *open_file(int socket, char *packet, char *dir_path, struct sockaddr_in sou
 * @return String length.
 */
 size_t strnlen(const char *s, size_t maxlen);
+
+long get_free_space(char *path);
+
+long check_file_size(char * file_name);
 
 #endif // UTILS_H

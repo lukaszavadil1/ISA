@@ -1,7 +1,7 @@
 //
 // File: utils.c
 //
-// Author: Lukáš Zavadil
+// Author: Lukáš Zavadil (xzavad20)
 //
 // Description: Implementation of helper functions.
 //
@@ -150,9 +150,9 @@ void data_set(char *packet, FILE *file) {
     }
 }
 
-char *data_get(char *packet) {
+char *data_get(char *packet, int recvfrom_size) {
     char *data = packet + packet_pos;
-    packet_pos += strnlen(data, options[BLKSIZE].value + 4);
+    packet_pos += recvfrom_size - 4;
     return data;
 }
 
@@ -186,7 +186,7 @@ char *error_msg_get(char *packet) {
     return error_msg;
 }
 
-void option_set(int type, long int value, int order) {
+void option_set(int type, long int value, int order, int opcode) {
     switch (type) {
         case TIMEOUT:
             if (value < 1 || value > 255) {
@@ -194,6 +194,9 @@ void option_set(int type, long int value, int order) {
             }
             break;
         case TSIZE:
+            if (opcode == RRQ && value != 0) {
+                error_exit("Read request tsize must be 0.");
+            }
             if (value < 0 || value > 428998656) {
                 error_exit("Invalid tsize value.");
             }
@@ -251,15 +254,12 @@ char *option_get_name(int type) {
     }
 }
 
-void options_load(char *packet) {
+void options_load(char *packet, int opcode) {
     char *endptr = NULL;
     char name[MAX_STR_LEN];
     int type;
     long int value;
     static int order = 0;
-    options[TIMEOUT] = (Option_t){false, 0, -1};
-    options[TSIZE] = (Option_t){false, 0, -1};
-    options[BLKSIZE] = (Option_t){false, 0, -1};
     while (packet[packet_pos] != '\0') {
         strncpy(name, packet + packet_pos, MAX_STR_LEN - 1);
         type = option_get_type(name);
@@ -274,7 +274,28 @@ void options_load(char *packet) {
         if (*endptr != '\0') {
             error_exit("Invalid option value.");
         }
-        option_set(type, value, order++);
+        if (strcmp(name, TIMEOUT_NAME) == 0) {
+            if (value < 1 || value > 255) {
+                error_exit("Invalid timeout value.");
+            }
+        }
+        else if (strcmp(name, TSIZE_NAME) == 0) {
+            if (opcode == RRQ && value != 0) {
+                error_exit("Read request tsize must be 0.");
+            }
+            if (value < 0 || value > 428998656) {
+                error_exit("Invalid tsize value.");
+            }
+        }
+        else if (strcmp(name, BLKSIZE_NAME) == 0) {
+            if (value < 8 || value > 65464) {
+                error_exit("Invalid blksize value.");
+            }
+        }
+        else {
+            error_exit("Invalid option.");
+        }
+        option_set(type, value, order++, opcode);
         packet_pos += strlen(packet + packet_pos) + 1;
     }
 }
@@ -317,7 +338,7 @@ void handle_request_packet(char *packet) {
     if (strcmp(mode, "octet") != 0 && strcmp(mode, "netascii") != 0) {
         error_exit("Unsupported mode.");
     }
-    options_load(packet);
+    options_load(packet, opcode);
     if (packet_pos == REQUEST_PACKET_SIZE) {
         error_exit("Request packet too long.");
     }
@@ -336,9 +357,12 @@ void send_request_packet(int socket, struct sockaddr_in dest_addr, int opcode, c
     mode_set(OCTET, packet);
     empty_byte_insert(packet);
     // Set options.
-    option_set(BLKSIZE, 1024, 1);
-    option_set(TIMEOUT, 5, 0);
+    // Remove after testing.
+    option_set(TSIZE, 0, 2, 0);
+    option_set(TIMEOUT, 5, 0, 0);
+    option_set(BLKSIZE, 1024, 1, 0);
     options_set(packet);
+    // Remove after testing.
     
     if (sendto(socket, packet, packet_pos, MSG_CONFIRM, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
         error_exit("Sendto failed.");
@@ -398,7 +422,7 @@ void send_oack_packet(int socket, struct sockaddr_in dest_addr) {
     packet_pos = 0;
 }
 
-bool handle_data_packet(char *packet, int expected_block_number, FILE *file) {
+void handle_data_packet(char *packet, int expected_block_number, FILE *file, int recvfrom_size) {
     int opcode, block_number;
     char data[options[BLKSIZE].value];
 
@@ -410,16 +434,11 @@ bool handle_data_packet(char *packet, int expected_block_number, FILE *file) {
     if (block_number != expected_block_number) {
         error_exit("Invalid data block number.");
     }
-    memcpy(data, data_get(packet), options[BLKSIZE].value + 4);
-    for (size_t i = 0; i < strnlen(data, options[BLKSIZE].value + 4); i++) {
+    memcpy(data, data_get(packet, recvfrom_size), recvfrom_size - 4);
+    for (int i = 0; i < recvfrom_size - 4; i++) {
         fputc(data[i], file);
     }
-    if (strnlen(data, options[BLKSIZE].value) < (long unsigned int)options[BLKSIZE].value) {
-        packet_pos = 0;
-        return true;
-    }
     packet_pos = 0;
-    return false;
 }
 
 bool send_data_packet(int socket, struct sockaddr_in dest_addr, int block_number, FILE *file) {
@@ -462,7 +481,7 @@ void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
 
     // Get required information for printing message.
     if (getsockname(socket, (struct sockaddr *)&dest_addr, (socklen_t *)&dest_addr_size) < 0) {
-        error_exit("Getsockname failed.");
+        send_error_packet(socket, source_addr, ERR_NOT_DEFINED, "Failed to get socket name.");
     }
     int dest_port = ntohs(dest_addr.sin_port);
     int src_port = ntohs(source_addr.sin_port);
@@ -507,7 +526,7 @@ void display_message(int socket, struct sockaddr_in source_addr, char *packet) {
 
 void display_options(char *packet) {
     while (packet[packet_pos] != '\0') {
-        fprintf(stderr, " %s: %s", packet + packet_pos, packet + packet_pos + strlen(packet + packet_pos) + 1);
+        fprintf(stderr, " %s=%s", packet + packet_pos, packet + packet_pos + strlen(packet + packet_pos) + 1);
         packet_pos += strlen(packet + packet_pos) + 1 + strlen(packet + packet_pos + strlen(packet + packet_pos) + 1) + 1;
     }
     printf("\n");
@@ -515,6 +534,8 @@ void display_options(char *packet) {
 
 FILE *open_file(int socket, char *packet, char *dir_path, struct sockaddr_in addr) {
     int opcode;
+    long size;
+    int available_memory;
     char file_name[MAX_FILE_NAME_LEN + 1];
     char mode[MAX_MODE_LEN + 1];
     char full_path[MAX_FILE_NAME_LEN + MAX_DIR_PATH_LEN + 2];
@@ -528,10 +549,24 @@ FILE *open_file(int socket, char *packet, char *dir_path, struct sockaddr_in add
 
     if (opcode == WRQ) {
         if (access(full_path, F_OK) != -1) {
-            send_error_packet(socket, addr, 6, "File already exists.");
+            send_error_packet(socket, addr, ERR_FILE_ALREADY_EXISTS, "File already exists.");
             exit(EXIT_FAILURE);
         }
         file = fopen(full_path, "w");
+        if (file == NULL) {
+            send_error_packet(socket, addr, ERR_FILE_NOT_FOUND, "File not found.");
+            exit(EXIT_FAILURE);
+        }
+        if (options[TSIZE].flag) {
+            size = option_get_value(TSIZE);
+            if ((available_memory = check_memory(dir_path)) == -1) {
+                send_error_packet(socket, addr, ERR_NOT_DEFINED, "Failed to get file size.");
+            }
+            if (size >= available_memory) {
+                send_error_packet(socket, addr, ERR_DISK_FULL, "Not enough space.");
+            }
+            option_set(TSIZE, size, option_get_order(TSIZE), 0);
+        }
     }
     else if (opcode == RRQ) {
         if (strcmp(mode, "netascii") == 0) {
@@ -541,16 +576,20 @@ FILE *open_file(int socket, char *packet, char *dir_path, struct sockaddr_in add
             file = fopen(full_path, "rb");
         }
         else {
-            send_error_packet(socket, addr, 4, "Illegal TFTP operation.");
-            exit(EXIT_FAILURE);
+            send_error_packet(socket, addr, ERR_ILLEGAL_OPERATION, "Illegal TFTP operation.");
+        }
+        if (file == NULL) {
+            send_error_packet(socket, addr, ERR_FILE_NOT_FOUND, "File not found.");
+        }
+        if (options[TSIZE].flag) {
+            if ((size = check_file_size(full_path)) == -1) {
+                send_error_packet(socket, addr, ERR_NOT_DEFINED, "Failed to get file size.");
+            }
+            option_set(TSIZE, size, option_get_order(TSIZE), 0);
         }
     }
     else {
-        send_error_packet(socket, addr, 4, "Illegal TFTP operation.");
-        exit(EXIT_FAILURE);
-    }
-    if (file == NULL) {
-        send_error_packet(socket, addr, 1, "File not found.");
+        send_error_packet(socket, addr, ERR_ILLEGAL_OPERATION, "Illegal TFTP operation.");
         exit(EXIT_FAILURE);
     }
     packet_pos = 0;
@@ -563,4 +602,20 @@ size_t strnlen(const char *s, size_t maxlen) {
     if(s)
         for(char c = *s; (len < maxlen && c != '\0'); c = *++s) len++;
     return len;
+}
+
+long check_memory(char *dir_path) {
+    struct statfs mem;
+    if (statfs(dir_path, &mem) == -1) {
+        return -1;
+    }
+    return (long) mem.f_bavail * mem.f_bsize;
+}
+
+long check_file_size(char *file_name) {
+    struct stat status;
+    if (stat(file_name, &status) < 0) {
+        return -1;
+    }
+    return status.st_size;
 }

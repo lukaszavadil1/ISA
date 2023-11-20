@@ -1,7 +1,7 @@
 //
 // File: tftp-server.h
 //
-// Author: Lukáš Zavadil
+// Author: Lukáš Zavadil (xzavad20)
 //
 // Description: Header file for tftp server.
 //

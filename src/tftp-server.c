@@ -1,7 +1,7 @@
 //
 // File: tfpt-server.c
 //
-// Author: Lukáš Zavadil
+// Author: Lukáš Zavadil (xzavad20)
 //
 // Description: Implementation of TFTP server.
 //
@@ -73,6 +73,7 @@ int main(int argc, char *argv[]) {
             // Request packet attributes.
             int opcode;
             int out_block_number = 0;
+            int recvfrom_size;
 
             // Pointer to the current position in packet.
             packet_pos = 0;
@@ -94,19 +95,19 @@ int main(int argc, char *argv[]) {
             if (opcode == RRQ) {
                 if (options[TIMEOUT].flag || options[TSIZE].flag || options[BLKSIZE].flag) {
                     send_oack_packet(sock_fd, client_address);
-                    if (recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&client_address,
-                                (socklen_t *) &client_address_size) < 0) {
-                        error_exit("Recvfrom failed on server side.");
+                    if (recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&client_address, (socklen_t *) &client_address_size) < 0) {
+                        send_error_packet(sock_fd, client_address, 0, "Recvfrom failed on server side.");
                     }
                     handle_ack_packet(packet, 0);
                     display_message(sock_fd, client_address, packet);
                 }
+                packet = realloc(packet, options[BLKSIZE].value + 4);
                 while(true) {
                     memset(packet, 0, options[BLKSIZE].value + 4);
                     last = send_data_packet(sock_fd, client_address, ++out_block_number, file);
                     if (recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&client_address,
                                 (socklen_t *) &client_address_size) < 0) {
-                        error_exit("Recvfrom failed on server side.");
+                        send_error_packet(sock_fd, client_address, 0, "Recvfrom failed on server side.");
                     }
                     handle_ack_packet(packet, out_block_number);
                     display_message(sock_fd, client_address, packet);
@@ -124,30 +125,33 @@ int main(int argc, char *argv[]) {
                 else {
                     send_ack_packet(sock_fd, client_address, 0);
                 }
+                packet = realloc(packet, options[BLKSIZE].value + 4);
                 while (true) {
-                    int packet_size = options[BLKSIZE].value + 4;
-                    packet = realloc(packet, packet_size);
-                    memset(packet, 0, packet_size);
-                    if (recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&client_address,
-                                (socklen_t *) &client_address_size) < 0) {
-                        error_exit("Recvfrom failed on server side.");
+                    memset(packet, 0, options[BLKSIZE].value + 4);
+                    if ((recvfrom_size = recvfrom(sock_fd, (char *)packet, options[BLKSIZE].value + 4, MSG_WAITALL, (struct sockaddr *)&client_address,
+                                (socklen_t *) &client_address_size)) < 0) {
+                        fclose(file);
+                        send_error_packet(sock_fd, client_address, 0, "Recvfrom failed on server side.");
                     }
-                    last = handle_data_packet(packet, ++out_block_number, file);
+                    handle_data_packet(packet, ++out_block_number, file, recvfrom_size);
                     display_message(sock_fd, client_address, packet);
                     memset(packet, 0, options[BLKSIZE].value + 4);
 
                     send_ack_packet(sock_fd, client_address, out_block_number);
-                    if (last == true) {
+                    if (recvfrom_size < options[BLKSIZE].value + 4) {
                         fclose(file);
                         break;
                     }
                 }
             }
             else {
-                send_error_packet(sock_fd, client_address, 4, "Illegal TFTP operation.");
+                send_error_packet(sock_fd, client_address, 4, "Expected RRQ or WRQ.");
                 exit(EXIT_FAILURE);
             }
+            shutdown(sock_fd, SHUT_RDWR);
+            close(sock_fd);
         }
+
     }
 }
 

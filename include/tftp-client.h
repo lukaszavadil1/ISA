@@ -1,7 +1,7 @@
 //
 // File: tftp-client.h
 //
-// Author: Lukáš Zavadil
+// Author: Lukáš Zavadil (xzavad20)
 //
 // Description: Header file for tfpt client.
 //
